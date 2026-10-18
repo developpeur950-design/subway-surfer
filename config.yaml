@@ -1,0 +1,84 @@
+# ======================================================================
+#  Récompenses (identiques pour le simulateur et le vrai jeu)
+# ======================================================================
+rewards:
+  per_point: 0.01              # + pour chaque point de score gagné
+  per_coin: 1.0                # + pour chaque pièce ramassée
+  per_multiplier_star: 5.0     # + pour chaque étoile multiplicatrice ramassée
+  death: -10.0                 # - quand il meurt
+  stumble: -3.0                # - quand il se prend un mur / trébuche
+  alive_bonus: 0.0             # + petit bonus par pas de temps vivant (optionnel)
+  normalize_score_by_multiplier: false
+  max_points_per_step: 5000    # protège contre les erreurs de lecture OCR
+
+# ======================================================================
+#  Agent (PPO + réseau convolutif sur les pixels)
+# ======================================================================
+agent:
+  frame_stack: 4               # 4 images empilées -> l'agent perçoit la vitesse/le mouvement
+  learning_rate: 0.00025
+  n_steps: 256                 # pas par environnement avant chaque mise à jour (simulateur)
+  n_steps_screen: 512          # idem pour le vrai jeu
+  batch_size: 256
+  n_epochs: 4
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.1
+  ent_coef: 0.01               # encourage l'exploration
+  save_every: 50000
+
+# Curiosité (RND) : récompense intrinsèque pour découvrir des situations nouvelles
+curiosity:
+  enabled: true
+  beta: 0.5
+  lr: 0.0001
+  update_every: 256
+
+# ======================================================================
+#  Vrai jeu (utilisez calibrate.py pour remplir les zones)
+# ======================================================================
+game:
+  controller: keyboard         # "keyboard" (navigateur/PC) ou "adb" (Android / BlueStacks)
+  capture: {left: 0, top: 0, width: 800, height: 600}   # zone de l'écran où se trouve le jeu
+  step_interval: 0.1           # secondes entre deux décisions (10 actions/s)
+  obs_size: 84
+  grayscale: false             # la couleur aide à distinguer pièces / étoiles / obstacles
+  obs_crop_y: [0.0, 1.0]       # partie verticale de l'image donnée à l'agent
+  use_hoverboard: false
+  max_episode_steps: 20000
+
+  # Zones [x, y, largeur, hauteur] relatives à la zone capturée
+  regions:
+    score: [600, 10, 190, 40]
+    coins: [600, 55, 190, 35]
+    multiplier: [520, 10, 70, 40]   # mettre null si non visible
+
+  # Images de référence (capturées avec calibrate.py)
+  templates:
+    death:                     # écran de mort / "Continuer ?"
+      - {path: templates/death.png, threshold: 0.8}
+    stumble: []                # ex : flash/icône quand on se cogne, l'inspecteur qui apparaît...
+    #  - {path: templates/stumble.png, region: [0, 300, 800, 300], threshold: 0.75}
+    star: []                   # icône du bonus multiplicateur (en plus de la lecture du multiplicateur)
+  frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
+  stumble_cooldown_steps: 10
+  max_score_jump: 5000
+
+  # Séquences d'actions (clavier : key/click/wait ; adb : tap/key/wait)
+  restart_sequence:
+    - {wait: 2.0}
+    - {key: escape}            # refuse le "continuer ?"
+    - {wait: 2.0}
+    - {key: space}             # relance une partie (à adapter à votre version du jeu)
+    - {wait: 2.5}
+  pause_sequence:
+    - {key: escape}
+  resume_sequence:
+    - {key: escape}
+    - {wait: 3.0}              # compte à rebours de reprise
+
+  adb:
+    serial: null
+    device_width: 1080
+    device_height: 2400
+    swipe_ms: 60

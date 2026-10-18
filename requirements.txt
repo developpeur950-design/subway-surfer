@@ -1,0 +1,17 @@
+# Apprentissage
+torch>=2.1
+stable-baselines3>=2.3
+gymnasium>=0.29
+tensorboard>=2.14
+numpy>=1.24
+PyYAML>=6.0
+
+# Vision / capture d'écran (vrai jeu)
+opencv-python>=4.8
+mss>=9.0
+pytesseract>=0.3.10   # nécessite le binaire Tesseract-OCR installé sur la machine
+
+# Contrôle clavier/souris (version navigateur / PC)
+pyautogui>=0.9.54
+# Android (BlueStacks / téléphone) : installer "adb" (Android platform-tools)
+imageio>=2.31
