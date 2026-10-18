@@ -1,14 +1,25 @@
 """Capture d'écran et envoi des commandes au vrai jeu.
 
 - ``KeyboardController`` : version navigateur/PC (flèches du clavier).
-- ``AdbController``      : Android (téléphone ou émulateur type BlueStacks) via des swipes adb.
+- ``MouseSwipeController`` : Android affiché sur le PC (scrcpy, émulateur) via des swipes à la souris.
+- ``AdbController``      : Android via des swipes adb (plus simple mais plus lent).
 """
 from __future__ import annotations
 
 import subprocess
+import sys
 import time
 
 import numpy as np
+
+if sys.platform == "win32":
+    # Sous Windows avec une mise à l'échelle (125 %, 150 %...), la capture et la
+    # souris n'utiliseraient pas les mêmes coordonnées : on force les pixels réels.
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        pass
 
 # 0 rien, 1 gauche, 2 droite, 3 saut, 4 roulade, 5 hoverboard (optionnel)
 ACTION_NAMES = ["rien", "gauche", "droite", "saut", "roulade", "hoverboard"]
@@ -52,6 +63,38 @@ class KeyboardController:
                 self.pg.click(self.region["left"] + x, self.region["top"] + y)
             if "wait" in st:
                 time.sleep(st["wait"])
+
+
+class MouseSwipeController(KeyboardController):
+    """Swipes à la souris dans une fenêtre qui recopie le téléphone (scrcpy, émulateur...).
+
+    scrcpy transforme les glisser-déposer de la souris en vrais gestes tactiles,
+    avec beaucoup moins de latence que "adb shell input swipe".
+    """
+
+    def __init__(self, cfg: dict):
+        super().__init__(cfg)
+        m = cfg.get("mouse_swipe", {})
+        self.dist = m.get("distance", 0.25)      # longueur du swipe (fraction de la zone)
+        self.duration = m.get("duration", 0.05)  # secondes
+        self.cy = m.get("start_y", 0.6)          # hauteur de départ (fraction de la zone)
+
+    def _swipe(self, dx: float, dy: float):
+        r = self.region
+        x = r["left"] + r["width"] // 2
+        y = r["top"] + int(r["height"] * self.cy)
+        d = self.dist * min(r["width"], r["height"])
+        self.pg.moveTo(x, y)
+        self.pg.dragTo(x + dx * d, y + dy * d, duration=self.duration, button="left")
+
+    def act(self, action: int):
+        action = int(action)
+        moves = {1: (-1, 0), 2: (1, 0), 3: (0, -1), 4: (0, 1)}
+        if action in moves:
+            self._swipe(*moves[action])
+        elif action == 5:
+            r = self.region
+            self.pg.click(r["left"] + r["width"] // 2, r["top"] + r["height"] // 2, clicks=2, interval=0.05)
 
 
 class AdbController:
@@ -102,6 +145,8 @@ def make_controller(cfg: dict):
     kind = cfg.get("controller", "keyboard")
     if kind == "keyboard":
         return KeyboardController(cfg)
+    if kind == "mouse_swipe":
+        return MouseSwipeController(cfg)
     if kind == "adb":
         return AdbController(cfg)
     raise ValueError(f"controller inconnu : {kind}")

@@ -38,7 +38,7 @@ curiosity:
 #  Vrai jeu (utilisez calibrate.py pour remplir les zones)
 # ======================================================================
 game:
-  controller: keyboard         # "keyboard" (navigateur/PC) ou "adb" (Android / BlueStacks)
+  controller: keyboard         # "keyboard" (navigateur/PC), "mouse_swipe" (téléphone via scrcpy) ou "adb"
   capture: {left: 0, top: 0, width: 800, height: 600}   # zone de l'écran où se trouve le jeu
   step_interval: 0.1           # secondes entre deux décisions (10 actions/s)
   obs_size: 84
@@ -76,6 +76,11 @@ game:
   resume_sequence:
     - {key: escape}
     - {wait: 3.0}              # compte à rebours de reprise
+
+  mouse_swipe:                 # pour controller: mouse_swipe
+    distance: 0.25
+    duration: 0.05
+    start_y: 0.6
 
   adb:
     serial: null

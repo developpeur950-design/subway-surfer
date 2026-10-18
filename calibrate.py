@@ -21,6 +21,8 @@ import cv2
 import numpy as np
 import yaml
 
+import subway_rl.controls  # noqa: F401  (active les coordonnées en pixels réels sous Windows)
+
 CONFIG = "config.yaml"
 
 

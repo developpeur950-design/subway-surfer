@@ -123,3 +123,31 @@ récompense. Il permet de vérifier en quelques dizaines de minutes que tout fon
 - `obs_crop_y` permet de retirer le HUD de l'image vue par l'agent.
 - Respectez les conditions d'utilisation du jeu : n'utilisez l'agent que hors ligne / en local,
   pas pour des classements en ligne.
+
+## 3. Subway Surfers City (Google Play) sur Windows
+
+Le jeu tourne sur un téléphone Android (ou un émulateur) et s'affiche sur le PC avec **scrcpy**.
+L'agent regarde la fenêtre scrcpy et joue en glissant la souris dedans : scrcpy transforme ces
+glissements en vrais swipes tactiles, avec peu de latence.
+
+1. Sur le téléphone : Paramètres → À propos → appuyer 7 fois sur « Numéro de build », puis dans
+   Options pour les développeurs activer **Débogage USB**. Brancher le téléphone en USB et accepter.
+2. Sur le PC : télécharger scrcpy pour Windows (github.com/Genymobile/scrcpy, il contient adb),
+   le dézipper, puis dans ce dossier :
+   ```powershell
+   .\scrcpy.exe --max-size 1024 --max-fps 30 --stay-awake --window-x 0 --window-y 0
+   ```
+3. Dans `config.yaml` : `controller: mouse_swipe`.
+4. Calibrer comme pour la version navigateur (`calibrate.py screenshot --full`, puis
+   `region capture` en encadrant l'écran du téléphone dans la fenêtre scrcpy, etc.).
+5. `restart_sequence`, `pause_sequence` et `resume_sequence` : utiliser des `click` aux
+   positions des boutons du jeu (Jouer, Pause, Reprendre). Un clic droit dans scrcpy = touche Retour.
+6. `python calibrate.py keys` doit faire bouger le personnage, puis
+   `python train.py --env screen`.
+
+Remarques :
+- Ne déplacez plus la fenêtre scrcpy après la calibration.
+- Le jeu est en ligne : utilisez un compte secondaire/invité ; l'automatisation peut être contraire
+  aux conditions d'utilisation de l'éditeur.
+- Sans téléphone : un émulateur (BlueStacks, LDPlayer…) fonctionne de la même façon, avec
+  `controller: mouse_swipe` sur sa fenêtre.
