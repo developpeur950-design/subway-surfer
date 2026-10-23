@@ -149,7 +149,7 @@ class GlyphReader:
         os.makedirs(self.folder, exist_ok=True)
         for g, ch in zip(glyphs, chars):
             lst = self.samples.setdefault(ch, [])
-            if len(lst) >= 6:
+            if len(lst) >= 12:
                 continue
             lst.append((g.shape, g.rel_h, g.rel_cy))
             fn = f"{NAMES.get(ch, ch)}_{len(lst)}.png"
