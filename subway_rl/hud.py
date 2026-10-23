@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 
 import cv2
 import numpy as np
@@ -23,6 +24,14 @@ try:
     import pytesseract
 except ImportError:  # pragma: no cover
     pytesseract = None
+
+if pytesseract is not None and shutil.which("tesseract") is None:
+    # Windows : Tesseract n'est souvent pas dans le PATH, on le cherche à sa place habituelle
+    for exe in (r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"):
+        if os.path.exists(exe):
+            pytesseract.pytesseract.tesseract_cmd = exe
+            break
 
 
 def crop(img: np.ndarray, region) -> np.ndarray:
