@@ -201,6 +201,73 @@ class ElementDiscovery:
         self.avg_danger += 0.01 * (d - self.avg_danger)
 
 
+class PlayerTracker:
+    """Suit le personnage d'image en image (en bas, en l'air, dans la bulle...).
+
+    Part de sa position habituelle (``home``, en fractions de l'image), puis cherche à chaque
+    image, autour de la dernière position, la zone qui ressemble le plus à son apparence.
+    Cette apparence est mise à jour petit à petit (éclairage, pose, bulle...). S'il est perdu,
+    ou s'il est de nouveau à sa place habituelle, le suivi se recale sur ``home``.
+    """
+
+    def __init__(self, home=(0.39, 0.65, 0.59, 0.85), scale: float = 0.4, search: float = 0.12,
+                 update_rate: float = 0.15, min_score: float = 0.35, recenter_every: int = 20):
+        self.home, self.scale, self.search = home, scale, search
+        self.update_rate, self.min_score, self.recenter_every = update_rate, min_score, recenter_every
+        self.reset()
+
+    def reset(self):
+        self.tpl, self.box, self.lost, self.t, self.score = None, None, 0, 0, 0.0
+
+    def _home_box(self, w, h):
+        x0, y0, x1, y1 = self.home
+        return [int(x0 * w), int(y0 * h), max(4, int((x1 - x0) * w)), max(4, int((y1 - y0) * h))]
+
+    def _grab(self, img, b):
+        x, y, w, h = b
+        return img[y:y + h, x:x + w].astype(np.float32)
+
+    def update(self, frame_bgr):
+        img = cv2.resize(frame_bgr, None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_AREA)
+        h, w = img.shape[:2]
+        self.t += 1
+        if self.tpl is None or self.tpl.shape[:2] != tuple(self._home_box(w, h)[3:1:-1]):
+            self.box = self._home_box(w, h)
+            self.tpl = self._grab(img, self.box)
+            return self._out()
+        x, y, bw, bh = self.box
+        m = int(self.search * max(w, h))
+        sx0, sy0 = max(0, x - m), max(0, y - m)
+        sx1, sy1 = min(w, x + bw + m), min(h, y + bh + m)
+        win = img[sy0:sy1, sx0:sx1].astype(np.float32)
+        if win.shape[0] < bh or win.shape[1] < bw:
+            self.reset()
+            return None
+        res = cv2.matchTemplate(win, self.tpl, cv2.TM_CCOEFF_NORMED)
+        _, score, _, loc = cv2.minMaxLoc(res)
+        self.score = float(score)
+        if score < self.min_score:
+            self.lost += 1
+            if self.lost > 5:  # perdu : on repart de sa place habituelle
+                self.box = self._home_box(w, h)
+                self.tpl = self._grab(img, self.box)
+                self.lost = 0
+            return self._out()
+        self.lost = 0
+        self.box = [sx0 + loc[0], sy0 + loc[1], bw, bh]
+        self.tpl += self.update_rate * (self._grab(img, self.box) - self.tpl)
+        # retour à sa place habituelle : on se recale pour éviter de dériver vers le décor
+        if self.t % self.recenter_every == 0:
+            hb = self._home_box(w, h)
+            home_score = cv2.matchTemplate(self._grab(img, hb), self.tpl, cv2.TM_CCOEFF_NORMED)[0, 0]
+            if home_score > score - 0.1:
+                self.box = hb
+        return self._out()
+
+    def _out(self):
+        return tuple(int(v / self.scale) for v in self.box)
+
+
 def agent_attention(model, obs) -> np.ndarray | None:
     """Carte (H, W) dans [0, 1] des pixels qui influencent le plus l'action choisie."""
     try:
@@ -217,6 +284,14 @@ def agent_attention(model, obs) -> np.ndarray | None:
         return None
 
 
+def _mostly_inside(a, b) -> bool:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    iw = max(0, min(ax + aw, bx + bw) - max(ax, bx))
+    ih = max(0, min(ay + ah, by + bh) - max(ay, by))
+    return iw * ih > 0.6 * aw * ah
+
+
 class LiveOverlay:
     """Fenêtre temps réel : image du jeu + cadres des éléments + attention de l'agent."""
 
@@ -224,11 +299,9 @@ class LiveOverlay:
                  show: bool = True, crop_y=(0.0, 1.0)):
         cfg = cfg or {}
         self.discovery = ElementDiscovery(**cfg.get("discovery", {}))
-        # états où le personnage n'est plus en bas de l'écran (bulle...) : images de référence
-        from .hud import TemplateDetector
-        self.away = [TemplateDetector(t["path"], t.get("region"), t.get("threshold", 0.7))
-                     for t in cfg.get("away_templates", []) if cv2.haveImageReader(t["path"])]
-        self.player_away = False
+        # le personnage est suivi d'image en image (vrai jeu)
+        self.tracker = PlayerTracker(**cfg.get("player_tracker", {}))
+        self.player_box = None
         self.display_height = cfg.get("display_height", 900)
         self.show_attention = cfg.get("show_attention", True)
         self.every = max(1, cfg.get("every_n_steps", 1))
@@ -285,14 +358,12 @@ class LiveOverlay:
             cv2.putText(img, label, (x + 2, max(th_, y - 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                         (0, 0, 0), 1, cv2.LINE_AA)
 
-        if "player_zone" not in info:  # zone du personnage (vrai jeu)
-            x0, y0, x1, y1 = self.discovery.player_zone
-            p0 = (int(x0 * W * scale), int(y0 * H * scale))
-            p1 = (int(x1 * W * scale), int(y1 * H * scale))
-            col = (120, 120, 120) if self.player_away else (255, 255, 255)
-            cv2.rectangle(img, p0, p1, col, 1)
-            txt = "personnage ailleurs (bulle...)" if self.player_away else "zone du personnage"
-            cv2.putText(img, txt, (p0[0], p1[1] + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.45, col, 1, cv2.LINE_AA)
+        if self.player_box is not None:  # le personnage, suivi en temps réel
+            x, y, w, h = (int(v * scale) for v in self.player_box)
+            cv2.rectangle(img, (x, y), (x + w, y + h), (255, 255, 255), 3)
+            cv2.rectangle(img, (x, max(0, y - 20)), (x + 110, y), (255, 255, 255), -1)
+            cv2.putText(img, "PERSONNAGE", (x + 3, max(14, y - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (0, 0, 0), 1, cv2.LINE_AA)
         img = np.hstack([img, self._panel(img.shape[0], info, action)])
         if self.video_path:
             if self.writer is None:
@@ -306,12 +377,25 @@ class LiveOverlay:
             cv2.waitKey(1)
 
     def _player_zone(self, frame_bgr, elements, info):
-        """Zone du personnage : donnée par le simulateur, sinon zone fixe en bas au centre
-        (la caméra suit le personnage), sauf s'il est ailleurs (bulle...) : on n'attribue rien."""
+        """Zone du personnage : donnée par le simulateur, sinon suivie d'image en image."""
         if info.get("player_zone"):
+            H, W = frame_bgr.shape[:2]
+            x0, y0, x1, y1 = info["player_zone"]
+            self.player_box = (int(x0 * W), int(y0 * H), int((x1 - x0) * W), int((y1 - y0) * H))
             return info["player_zone"]
-        self.player_away = any(d(frame_bgr) for d in self.away)
-        return "absent" if self.player_away else None
+        box = self.tracker.update(frame_bgr)
+        if "episode_totals" in info:
+            self.tracker.reset()
+        self.player_box = box
+        if box is None:
+            return "absent"
+        H, W = frame_bgr.shape[:2]
+        x, y, w, h = box
+        # le personnage lui-même n'est pas un élément qu'il "touche"
+        elements[:] = [e for e in elements if not _mostly_inside(e.box, box)]
+        m = 0.25  # un peu de marge autour du personnage
+        return (max(0, (x - m * w) / W), max(0, (y - m * h) / H),
+                min(1, (x + w * (1 + m)) / W), min(1, (y + h * (1 + m)) / H))
 
     def _panel(self, h, info, action):
         p = np.full((h, 260, 3), 25, np.uint8)

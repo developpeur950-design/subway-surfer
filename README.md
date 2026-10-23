@@ -201,12 +201,12 @@ Une fenêtre s'ouvre à droite de scrcpy avec un cadre autour de chaque élémen
   « att 60 % » indique l'attention qu'il porte à un élément.
 - **Le panneau de droite** liste les types découverts avec leurs gains et dangers moyens.
 
-Le personnage est cherché dans une zone fixe en bas au centre (`player_zone`), car la caméra
-le suit. Quand il est ailleurs (dans la bulle, en haut de l'écran), capturez la bulle une fois
-pour que ces moments soient ignorés :
+Le **personnage** est suivi en temps réel (cadre blanc « PERSONNAGE ») : partout où il va,
+y compris en l'air ou dans la bulle. Le suivi part de sa place habituelle en bas au centre ; pour
+la régler précisément, pendant une partie :
 ```powershell
-python calibrate.py record --seconds 15        # attrapez une bulle pendant l'enregistrement
-python calibrate.py template away --image calib/rec/XXXX.png   # encadrez le bord de la bulle
+python calibrate.py screenshot
+python calibrate.py region player      # encadrez le personnage
 ```
 
 Ces étiquettes s'affinent au fil des parties. Les premières minutes, presque tout est « ? ».

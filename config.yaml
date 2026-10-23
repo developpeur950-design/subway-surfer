@@ -39,6 +39,11 @@ overlay:
   display_height: 900          # hauteur de la fenêtre (pixels)
   show_attention: true         # carte de chaleur : où l'IA regarde pour décider
   every_n_steps: 1             # 2 ou 3 si le PC est lent
+  player_tracker:              # suivi du personnage (cadre blanc "PERSONNAGE")
+    home: [0.39, 0.65, 0.59, 0.85]  # sa place habituelle (x0, y0, x1, y1 en fractions) ;
+                                    # ou plus précis : python calibrate.py region player
+    update_rate: 0.15          # vitesse d'adaptation à son apparence (éclairage, bulle...)
+    min_score: 0.35            # en dessous : considéré perdu, puis recalé sur sa place habituelle
   discovery:
     n_types: 10                # nombre maximum de types d'éléments qu'il peut inventer
     diff_threshold: 30         # sensibilité (plus bas = plus de cadres)
@@ -46,7 +51,6 @@ overlay:
     ignore_top: 0.12           # ne pas encadrer le HUD (haut de l'écran)
     roi: null                  # zone de recherche : null = tout l'écran
                                # (ex. rails seulement : [[0.25, 0.22], [0.75, 0.22], [1.0, 0.92], [0.0, 0.92]])
-    player_zone: [0.33, 0.58, 0.67, 0.86] # zone du personnage (la caméra le suit : toujours en bas au centre)
     obstacle_factor: 1.5       # OBSTACLE si suivi de chocs/morts 1,5x plus que la moyenne (cadre rouge)
     bonus_factor: 1.5          # BONUS si suivi de pièces/étoiles 1,5x plus que la moyenne (cadre vert)
     bonus_horizon: 12          # pas (~1 s) pendant lesquels les gains comptent après un contact
@@ -82,7 +86,6 @@ game:
       - {path: templates/death.png, threshold: 0.8}
     stumble: []                # le garde (et son chien) qui apparaît en bas à gauche après un choc
     #  - {path: templates/stumble.png, region: [0, 300, 800, 300], threshold: 0.75}
-    away: []                   # écrans où le personnage n'est pas en bas (la bulle) : pour les cadres
     star: []                   # le bandeau « ÉTOILE SECRÈTE » (calibrate.py record + template star)
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 10
