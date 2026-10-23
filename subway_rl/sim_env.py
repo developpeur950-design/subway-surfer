@@ -144,7 +144,9 @@ class SubwaySimEnv(gym.Env):
         self.hud = HudState(self.score, self.coins, multiplier, self.stars, dead, stumbled)
         reward, parts = self.tracker.step(self.hud)
         truncated = self.t >= self.max_steps
-        info = {"score": self.score, "coins": self.coins, "stars": self.stars,
+        lane_w = 1 / 3
+        info = {"player_zone": (self.lane * lane_w, 0.8, (self.lane + 1) * lane_w, 1.0),
+                "score": self.score, "coins": self.coins, "stars": self.stars,
                 "stumbled": stumbled, "reward_parts": parts}
         if dead or truncated:
             info["episode_totals"] = dict(self.tracker.totals)
@@ -190,3 +192,7 @@ class SubwaySimEnv(gym.Env):
 
     def render(self):
         return self._obs()
+
+    def frame_bgr(self):
+        import cv2
+        return cv2.resize(self._obs()[:, :, ::-1], (420, 420), interpolation=cv2.INTER_NEAREST)

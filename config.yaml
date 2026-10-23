@@ -34,6 +34,24 @@ curiosity:
   lr: 0.0001
   update_every: 256
 
+# Fenêtre temps réel avec un cadre autour de chaque élément (train.py/play.py --overlay)
+overlay:
+  display_height: 900          # hauteur de la fenêtre (pixels)
+  show_attention: true         # carte de chaleur : où l'IA regarde pour décider
+  every_n_steps: 1             # 2 ou 3 si le PC est lent
+  discovery:
+    n_types: 10                # nombre maximum de types d'éléments qu'il peut inventer
+    diff_threshold: 30         # sensibilité (plus bas = plus de cadres)
+    min_area: 0.0008           # taille minimale d'un élément (fraction de l'image)
+    ignore_top: 0.12           # ne pas encadrer le HUD (haut de l'écran)
+    player_zone: [0.3, 0.55, 0.7, 0.85]   # où se trouve le personnage (x0, y0, x1, y1 en fractions)
+    obstacle_factor: 1.5       # OBSTACLE si suivi de chocs/morts 1,5x plus que la moyenne (cadre rouge)
+    bonus_factor: 1.5          # BONUS si suivi de pièces/étoiles 1,5x plus que la moyenne (cadre vert)
+    bonus_horizon: 12          # pas (~1 s) pendant lesquels les gains comptent après un contact
+                               # (augmentez-le pour les bonus qui rapportent après coup, comme l'aimant)
+    danger_horizon: 5
+    min_touches: 10            # contacts nécessaires avant de juger un type
+
 # ======================================================================
 #  Subway Surfers City (téléphone affiché sur le PC par scrcpy, ou BlueStacks)
 #  Toutes les valeurs ci-dessous sont des exemples : utilisez calibrate.py

@@ -102,3 +102,7 @@ class SubwayScreenEnv(gym.Env):
 
     def render(self):
         return None if self._last_frame is None else cv2.cvtColor(self._last_frame, cv2.COLOR_BGR2RGB)
+
+    def frame_bgr(self):
+        """Dernière capture en pleine résolution (pour l'affichage des cadres)."""
+        return self._last_frame

@@ -16,7 +16,7 @@ from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecFrameStack
 
-from subway_rl.callbacks import PauseGameDuringUpdate, RewardBreakdownCallback
+from subway_rl.callbacks import LiveOverlayCallback, PauseGameDuringUpdate, RewardBreakdownCallback
 from subway_rl.curiosity import VecRND
 
 
@@ -57,6 +57,8 @@ def main():
     ap.add_argument("--load", help="modèle .zip à reprendre")
     ap.add_argument("--no-curiosity", action="store_true")
     ap.add_argument("--device", default="auto")
+    ap.add_argument("--overlay", action="store_true", help="fenêtre temps réel : cadres autour des éléments")
+    ap.add_argument("--overlay-video", help="enregistre aussi cet affichage dans une vidéo .mp4")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
@@ -90,6 +92,9 @@ def main():
         if game is not None and cfg["game"].get("pause_sequence"):
             callbacks.append(PauseGameDuringUpdate(game))
 
+    if args.overlay or args.overlay_video:
+        callbacks.append(LiveOverlayCallback(make_overlay(cfg, args.env, args.overlay, args.overlay_video)))
+
     try:
         model.learn(total_timesteps=args.timesteps, callback=CallbackList(callbacks),
                     tb_log_name=f"ppo_{args.env}", reset_num_timesteps=not args.load)
@@ -98,6 +103,22 @@ def main():
         model.save(path)
         print(f"Modèle sauvegardé : {path}.zip")
         venv.close()
+
+
+def make_overlay(cfg: dict, env_kind: str, show: bool = True, video: str | None = None):
+    from subway_rl.overlay import LiveOverlay
+    ocfg = dict(cfg.get("overlay", {}))
+    g = cfg.get("game", {})
+    pos, crop = None, (0.0, 1.0)
+    if env_kind == "screen":
+        c = g["capture"]
+        pos = (c["left"] + c["width"] + 10, max(0, c["top"] - 30))  # à droite de scrcpy
+        crop = tuple(g.get("obs_crop_y", [0.0, 1.0]))
+    else:
+        ocfg = {**ocfg, "display_height": 420,
+                "discovery": {**ocfg.get("discovery", {}), "ignore_top": 0.0,
+                              "player_zone": [0.0, 0.85, 1.0, 1.0]}}
+    return LiveOverlay(ocfg, window_pos=pos, video_path=video, show=show, crop_y=crop)
 
 
 def _has_tensorboard() -> bool:

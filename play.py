@@ -10,7 +10,7 @@ import argparse
 import numpy as np
 from stable_baselines3 import PPO
 
-from train import build_env, load_config
+from train import build_env, load_config, make_overlay
 
 
 def main():
@@ -21,16 +21,22 @@ def main():
     ap.add_argument("--episodes", type=int, default=5)
     ap.add_argument("--stochastic", action="store_true", help="échantillonner les actions au lieu de prendre la meilleure")
     ap.add_argument("--gif", help="(simulateur) enregistre la première partie dans ce fichier GIF")
+    ap.add_argument("--overlay", action="store_true", help="fenêtre temps réel : cadres autour des éléments")
+    ap.add_argument("--overlay-video", help="enregistre aussi cet affichage dans une vidéo .mp4")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
     venv, _ = build_env(args.env, cfg, n_envs=1, seed=123)
     model = PPO.load(args.model, device="cpu")
 
+    overlay = (make_overlay(cfg, args.env, args.overlay, args.overlay_video)
+               if args.overlay or args.overlay_video else None)
     frames, done_eps, obs = [], 0, venv.reset()
     while done_eps < args.episodes:
         action, _ = model.predict(obs, deterministic=not args.stochastic)
         obs, _, dones, infos = venv.step(action)
+        if overlay:
+            overlay.update(venv.env_method("frame_bgr", indices=[0])[0], infos[0], model, obs, action[0])
         if args.gif and done_eps == 0:
             frames.append(venv.render())
         if dones[0]:
@@ -41,6 +47,8 @@ def main():
                   f"(trébuchements={t.get('stumble', 0) / (cfg['rewards'].get('stumble') or 1):.0f})")
             done_eps += 1
     venv.close()
+    if overlay:
+        overlay.close()
 
     if args.gif and frames:
         import imageio.v2 as imageio

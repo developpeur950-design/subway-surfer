@@ -63,6 +63,7 @@ subway_rl/
   controls.py         capture d'écran, swipes souris (scrcpy/BlueStacks), clavier ou adb
   curiosity.py        curiosité RND
   callbacks.py        statistiques TensorBoard, pause du jeu pendant l'apprentissage
+  overlay.py          cadres en temps réel : découverte des éléments, obstacles/bonus, attention
 ```
 
 ## Installation (PC Windows)
@@ -102,7 +103,9 @@ récompense. Il vérifie en quelques dizaines de minutes que tout fonctionne sur
    d'utilisation.
 2. Paramètres → À propos → appuyez 7 fois sur « Numéro de build », puis dans les Options pour
    les développeurs activez **Débogage USB**.
-3. Branchez le téléphone en USB, acceptez l'autorisation, activez **Ne pas déranger**,
+3. Branchez le téléphone en USB. Dans la notification « Paramètres USB », choisissez
+   **USB contrôlé par : Cet appareil** et **Transfert de fichiers / Android Auto**, puis acceptez
+   l'autorisation, activez **Ne pas déranger**,
    baissez la luminosité et laissez-le en charge.
 4. Lancez `lancer_scrcpy.bat` : l'écran du téléphone s'affiche en haut à gauche du PC.
    **Ne déplacez plus cette fenêtre.** (Sans câble : ajoutez `--tcpip`, mais l'agent réagira un
@@ -175,6 +178,32 @@ python train.py --env screen --timesteps 1000000
   `python train.py --env screen --load models/ppo_screen_final.zip --timesteps 1000000`
 - Suivi : `tensorboard --logdir runs` puis http://localhost:6006.
 - Le regarder jouer : `python play.py --env screen --model models/ppo_screen_final.zip`
+
+### Voir ce que l'IA reconnaît (cadres en temps réel)
+
+```powershell
+python train.py --env screen --timesteps 1000000 --overlay
+python play.py --env screen --model models/ppo_screen_final.zip --overlay
+```
+
+Une fenêtre s'ouvre à droite de scrcpy avec un cadre autour de chaque élément du jeu :
+
+- **Personne n'a étiqueté les éléments** : l'IA repère ce qui se détache du décor et regroupe
+  les éléments qui se ressemblent en types qu'elle invente (T0, T1, T2…).
+- **Elle juge chaque type d'après ce qui se passe quand le personnage le touche** :
+  - **OBSTACLE**, cadre rouge : le type est plus souvent suivi d'un choc ou d'une mort que la
+    moyenne (trains, barrières…) ;
+  - **BONUS**, cadre vert : le type est plus souvent suivi de pièces ou d'étoiles (pièces,
+    bonus…) ;
+  - **neutre** ou **?** : pas encore assez d'observations, ou aucun effet notable.
+- **La carte de chaleur** (rouge/jaune) montre où le réseau qui joue regarde pour décider ;
+  « att 60 % » indique l'attention qu'il porte à un élément.
+- **Le panneau de droite** liste les types découverts avec leurs gains et dangers moyens.
+
+Ces étiquettes s'affinent au fil des parties. Les premières minutes, presque tout est « ? ».
+Ajoutez `--overlay-video partie.mp4` pour enregistrer l'affichage. Réglages dans `config.yaml`,
+section `overlay` : sensibilité, zone du personnage, seuils obstacle/bonus. Si le PC rame,
+mettez `every_n_steps: 2`.
 
 ### Conseils
 

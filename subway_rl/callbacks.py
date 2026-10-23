@@ -46,3 +46,20 @@ class PauseGameDuringUpdate(BaseCallback):
 
     def _on_step(self) -> bool:
         return True
+
+
+class LiveOverlayCallback(BaseCallback):
+    """Affiche en temps réel les cadres autour des éléments découverts (premier environnement)."""
+
+    def __init__(self, overlay):
+        super().__init__()
+        self.overlay = overlay
+
+    def _on_step(self) -> bool:
+        frame = self.training_env.env_method("frame_bgr", indices=[0])[0]
+        obs = self.locals["new_obs"][:1]
+        self.overlay.update(frame, self.locals["infos"][0], self.model, obs, self.locals["actions"][0])
+        return True
+
+    def _on_training_end(self) -> None:
+        self.overlay.close()
