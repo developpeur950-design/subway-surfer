@@ -46,7 +46,7 @@ class NumberReader:
 
     def __init__(self, region, monotonic: bool = True, max_jump: float | None = None,
                  invert: bool = False, scale: float = 3.0, decimal: bool = False, glyphs=None,
-                 confirm: int = 1, valid_range: tuple | None = None):
+                 confirm: int = 1, valid_range: tuple | None = None, big_jump: float | None = None):
         # glyphs : police du jeu apprise avec « calibrate.py digits » (bien plus fiable)
         self.glyphs = glyphs
         if pytesseract is None and glyphs is None:
@@ -56,6 +56,9 @@ class NumberReader:
         self.value, self._fresh = 0, True
         self.confirm = confirm          # nb de lectures identiques d'affilée avant d'accepter
         self.valid_range = valid_range  # valeurs possibles (ex : multiplicateur entre 1 et 60)
+        # au-delà de ce saut, la lecture doit être confirmée par la suivante (un vrai bonus
+        # persiste ; une erreur de lecture, comme un chiffre en trop, est isolée)
+        self.big_jump, self._pending = big_jump, None
         self._candidate, self._count = None, 0
         self._rejected: list[float] = []
         self.last_raw, self.status = None, ""  # pour le diagnostic (calibrate.py test)
@@ -63,6 +66,7 @@ class NumberReader:
     def reset(self, value: int = 0):
         self.value = value
         self._fresh = True  # la première lecture d'une partie est acceptée telle quelle
+        self._pending = None
 
     def _parse(self, text: str) -> float | None:
         if self.decimal:  # ex : "x8,5" -> 8.5
@@ -89,6 +93,27 @@ class NumberReader:
             bw, config=f"--psm 7 -c tessedit_char_whitelist={whitelist}")
         return self._parse(text)
 
+    RESYNC = 6  # lectures d'affilée, cohérentes entre elles, pour corriger la valeur mémorisée
+
+    def _disagree(self, v, status):
+        """Lecture refusée. Si les dernières refusées sont toutes cohérentes entre elles (même
+        nombre de chiffres, qui montent par petits pas), c'est la valeur mémorisée qui était
+        fausse : on se recale dessus."""
+        # vers un nombre plus court (chiffres sortis de la zone pendant un zoom...) : il faut
+        # bien plus de confirmations, car le score ne redescend jamais pendant une partie
+        shorter = self.monotonic and len(str(int(v))) < len(str(int(self.value)))
+        need = self.RESYNC * 5 if shorter else self.RESYNC
+        self._rejected = (self._rejected + [v])[-need:]
+        r = self._rejected
+        step = self.big_jump if self.big_jump is not None else (self.max_jump or float("inf")) / 4
+        steady = (len(r) == need and all(a <= b <= a + step for a, b in zip(r, r[1:]))
+                  and len({len(str(int(x))) for x in r}) == 1)
+        if steady:
+            self.value, self._rejected, self._pending, self.status = v, [], None, "recalé"
+            return v
+        self.status = status
+        return self.value
+
     def read(self, img: np.ndarray) -> float:
         v = self.raw_read(img)
         self.last_raw = v
@@ -102,12 +127,6 @@ class NumberReader:
         if v is None:
             self.status = "illisible"
             return self.value
-        # score et pièces ne perdent jamais de chiffres pendant une partie : une lecture plus
-        # courte est une lecture partielle (animation, chiffre masqué), jamais une vraie valeur
-        if (self.monotonic and not self._fresh and self.value >= 10
-                and len(str(int(v))) < len(str(int(self.value)))):
-            self.status = "incomplet"
-            return self.value
         # lecture confirmée plusieurs fois d'affilée (évite les erreurs isolées)
         self._count = self._count + 1 if v == self._candidate else 1
         self._candidate = v
@@ -118,21 +137,21 @@ class NumberReader:
             self.value, self._fresh, self._rejected = v, False, []
             self.status = "ok"
             return v
-        bad = ((self.monotonic and v < self.value)
-               or (self.max_jump is not None and self.value and v - self.value > self.max_jump))
-        if bad:
-            # plusieurs lectures cohérentes entre elles mais rejetées : c'est la valeur
-            # mémorisée qui était fausse -> on se recale dessus
-            self._rejected = (self._rejected + [v])[-3:]
-            r = self._rejected
-            steady = len(r) == 3 and r[0] <= r[1] <= r[2] and (
-                self.max_jump is None or (r[1] - r[0] <= self.max_jump / 4 and r[2] - r[1] <= self.max_jump / 4))
-            if steady:
-                self.value, self._rejected, self.status = v, [], "recalé"
-                return v
-            self.status = "rejeté"
-            return self.value
-        self._rejected = []
+        # score et pièces ne perdent jamais de chiffres pendant une partie : une lecture plus
+        # courte est une lecture partielle (animation, chiffre masqué)
+        if (self.monotonic and self.value >= 10
+                and len(str(int(v))) < len(str(int(self.value)))):
+            return self._disagree(v, "incomplet")
+        if ((self.monotonic and v < self.value)
+                or (self.max_jump is not None and self.value and v - self.value > self.max_jump)):
+            return self._disagree(v, "rejeté")
+        if self.big_jump is not None and self.value and v - self.value > self.big_jump:
+            # grand saut (bonus) : accepté seulement s'il se confirme à la lecture suivante
+            p = self._pending
+            if p is None or not (p <= v <= p + self.big_jump):
+                self._pending = v
+                return self._disagree(v, "saut à confirmer")
+        self._rejected, self._pending = [], None
         self.value, self.status = v, "ok"
         return v
 
@@ -162,17 +181,21 @@ class HudReader:
         regions = cfg.get("regions", {})
         from .glyphs import GROUPS, GlyphReader
         folder = cfg.get("digits_folder", "templates/digits")
+        if not os.path.isdir(folder) and os.path.isdir("pretrained/digits"):
+            folder = "pretrained/digits"  # police apprise sur une vraie partie
         g = {grp: GlyphReader(folder, grp) for grp in set(GROUPS.values())}
         g = {k: (v if v.samples else None) for k, v in g.items()}
-        self.score = NumberReader(regions["score"], max_jump=cfg.get("max_score_jump", 5000),
+        self.score = NumberReader(regions["score"], max_jump=cfg.get("max_score_jump", 50000),
+                                  big_jump=cfg.get("score_confirm_jump", 2000),
                                   glyphs=g[GROUPS["score"]])
-        self.coins = NumberReader(regions["coins"], max_jump=50, glyphs=g[GROUPS["coins"]])
+        self.coins = NumberReader(regions["coins"], max_jump=50, glyphs=g[GROUPS["coins"]], big_jump=15)
         # Le multiplicateur est lu pour information (il peut changer pour d'autres
         # raisons que les étoiles) ; les étoiles sont détectées visuellement, voir read().
+        has_reader = lambda grp: g[grp] is not None or pytesseract is not None  # noqa: E731
         self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100, decimal=True,
                                   glyphs=g[GROUPS["multiplier"]], confirm=2,
                                   valid_range=tuple(cfg.get("multiplier_range", [1, 60])))
-                     if regions.get("multiplier") else None)
+                     if regions.get("multiplier") and has_reader(GROUPS["multiplier"]) else None)
 
         def detectors(key):
             out = []

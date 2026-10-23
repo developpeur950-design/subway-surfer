@@ -52,8 +52,10 @@ directement.
 ```
 train.py              entraînement (simulateur ou vrai jeu)
 play.py               faire jouer un modèle entraîné
-calibrate.py          configuration du vrai jeu (zones du HUD, images de référence, boutons, test)
-lancer_scrcpy.bat     affiche le téléphone sur le PC (double-clic)
+calibrate.py          configuration du vrai jeu (zones du HUD, police des chiffres, images de référence, boutons, personnage, test)
+train_player.py       entraîne le détecteur du personnage
+pretrained/           détecteur du personnage et police des chiffres appris sur une vraie partie
+lancer_scrcpy.bat     affiche le téléphone sur le PC (double-clic) ; lancer_scrcpy_wifi.bat : sans câble
 scrcpy/               scrcpy v5.0.1 + adb pour Windows (licence Apache 2.0)
 config.yaml           récompenses, hyperparamètres, réglages du jeu
 subway_rl/
@@ -110,6 +112,24 @@ récompense. Il vérifie en quelques dizaines de minutes que tout fonctionne sur
    **Ne déplacez plus cette fenêtre.** (Sans câble : ajoutez `--tcpip`, mais l'agent réagira un
    peu plus lentement.)
 5. Ouvrez Subway Surfers City et allez jusqu'à l'écran « toucher pour jouer ».
+
+### Sans câble (Wi-Fi)
+
+Le PC et le téléphone doivent être sur le même réseau Wi-Fi. L'image arrive un peu plus tard
+qu'en USB (l'agent réagit un peu moins vite) : préférez une box proche, en 5 GHz.
+
+- **Méthode simple** : branchez le câble une fois, double-cliquez sur `lancer_scrcpy_wifi.bat`,
+  puis débranchez quand la fenêtre du téléphone apparaît.
+- **Sans jamais brancher** (Android 11 ou plus) : Options pour les développeurs → **Débogage
+  sans fil** → activer → « Associer l'appareil avec un code d'association ». Sur le PC :
+  ```powershell
+  .\scrcpy\adb.exe pair 192.168.1.42:37123      # adresse et port affichés dans la fenêtre d'association, puis le code
+  ```
+  Puis écrivez l'adresse affichée sous « Adresse IP et port » (sur l'écran Débogage sans fil,
+  ce n'est pas le même port) dans le fichier `calib\ip_telephone.txt`, par ex. `192.168.1.42:41567`,
+  et lancez `lancer_scrcpy_wifi.bat`. Ce port change à chaque redémarrage du débogage sans fil.
+
+Laissez le téléphone **sur son chargeur secteur** : l'entraînement dure des heures.
 
 ## 3. Calibrer (une seule fois)
 
@@ -208,12 +228,14 @@ Une fenêtre s'ouvre à droite de scrcpy avec un cadre autour de chaque élémen
   « att 60 % » indique l'attention qu'il porte à un élément.
 - **Le panneau de droite** liste les types découverts avec leurs gains et dangers moyens.
 
-Le **personnage** est suivi en temps réel (cadre blanc « PERSONNAGE ») : partout où il va,
-y compris en l'air ou dans la bulle. Le suivi part de sa place habituelle en bas au centre ; pour
-la régler précisément, pendant une partie :
+Le **personnage** est retrouvé à chaque image (cadre blanc « PERSONNAGE ») par un petit
+détecteur. Celui fourni dans `pretrained/` a été entraîné sur une vraie partie avec la tenue
+actuelle du personnage. Si vous changez de personnage ou de tenue, ou s'il le rate souvent,
+entraînez le vôtre (une trentaine d'images à encadrer, puis quelques minutes) :
 ```powershell
-python calibrate.py screenshot
-python calibrate.py region player      # encadrez le personnage
+python calibrate.py record --seconds 60      # jouez : sauts, hoverboard, bonus, toits des trains...
+python calibrate.py player                   # encadrez le personnage sur les images proposées
+python train_player.py                       # crée models/player_detector.pt
 ```
 
 Ces étiquettes s'affinent au fil des parties. Les premières minutes, presque tout est « ? ».

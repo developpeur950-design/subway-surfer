@@ -9,7 +9,7 @@ rewards:
   stumble: -3.0                # - quand il se prend un mur / trébuche
   alive_bonus: 0.0             # + petit bonus par pas de temps vivant (optionnel)
   normalize_score_by_multiplier: false
-  max_points_per_step: 5000    # protège contre les erreurs de lecture OCR
+  max_points_per_step: 50000   # protège contre les erreurs de lecture OCR
 
 # ======================================================================
 #  Agent (PPO + réseau convolutif sur les pixels)
@@ -39,7 +39,9 @@ overlay:
   display_height: 900          # hauteur de la fenêtre (pixels)
   show_attention: true         # carte de chaleur : où l'IA regarde pour décider
   every_n_steps: 1             # 2 ou 3 si le PC est lent
-  player_tracker:              # suivi du personnage (cadre blanc "PERSONNAGE")
+  player_detector: models/player_detector.pt   # détecteur du personnage (train_player.py) ;
+                               # à défaut : pretrained/player_detector.pt, puis le suivi ci-dessous
+  player_tracker:              # suivi du personnage si aucun détecteur (moins fiable)
     home: [0.39, 0.65, 0.59, 0.85]  # sa place habituelle (x0, y0, x1, y1 en fractions) ;
                                     # ou plus précis : python calibrate.py region player
     update_rate: 0.15          # vitesse d'adaptation à son apparence (éclairage, bulle...)
@@ -89,7 +91,7 @@ game:
     star: []                   # le bandeau « ÉTOILE SECRÈTE » (calibrate.py record + template star)
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 10
-  max_score_jump: 5000
+  max_score_jump: 50000        # les bonus du jeu peuvent ajouter plusieurs milliers de points d un coup
   star_cooldown_steps: 3       # pas minimum entre deux étoiles comptées
 
   # Séquences d'actions : {click: [x, y]} dans la zone capturée, {key: ...}, {wait: secondes}

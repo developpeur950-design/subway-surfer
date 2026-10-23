@@ -63,7 +63,39 @@ def _normalize(g: np.ndarray) -> np.ndarray:
     return canvas
 
 
-def segment(roi: np.ndarray, mode: str) -> list[Glyph]:
+def _split_wide(labels, comps, line_h):
+    """Sépare les chiffres collés (petite police + compression vidéo : « 52 » en un seul bloc)."""
+    out = []
+    next_id = labels.max() + 1
+    for x, y, w, h, i in comps:
+        n = int(round(w / (0.62 * max(h, 1))))
+        if n < 2 or h < 0.6 * line_h:
+            out.append((x, y, w, h, i))
+            continue
+        sub = (labels[y:y + h, x:x + w] == i)
+        prof = sub.sum(axis=0).astype(float)
+        cuts = []
+        for k in range(1, n):  # coupe au creux de la projection près de chaque frontière attendue
+            c = int(w * k / n)
+            lo, hi = max(1, c - w // (3 * n)), min(w - 1, c + w // (3 * n) + 1)
+            cuts.append(lo + int(np.argmin(prof[lo:hi])) if hi > lo else c)
+        edges = [0] + cuts + [w]
+        for a, b in zip(edges, edges[1:]):
+            part = np.zeros_like(sub)
+            part[:, a:b] = sub[:, a:b]
+            ys = np.where(part.any(axis=1))[0]
+            if b - a < 2 or len(ys) == 0:
+                continue
+            labels[y:y + h, x:x + w][part] = next_id
+            out.append((x + a, y + ys[0], b - a, ys[-1] - ys[0] + 1, next_id))
+            next_id += 1
+    return out
+
+
+def segment(roi: np.ndarray, mode: str, split: bool = True) -> list[Glyph]:
+    if roi.shape[0] < 60:  # petite police : on agrandit avant de découper
+        f = 60 / roi.shape[0]
+        roi = cv2.resize(roi, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC)
     m = _mask(roi, mode)
     H, W = m.shape
     n, labels, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
@@ -77,8 +109,10 @@ def segment(roi: np.ndarray, mode: str) -> list[Glyph]:
     if not comps:
         return []
     big = max(c[3] for c in comps)
-    # trop large pour un caractère (bord d'un cadre du HUD...) ou minuscule
-    comps = sorted(c for c in comps if c[3] >= 0.2 * big and c[2] <= 1.2 * big)
+    # minuscule, ou bien trop large même pour 3 chiffres collés (bord d'un cadre du HUD...)
+    comps = sorted(c for c in comps if c[3] >= 0.2 * big and c[2] <= 2.2 * big)
+    if comps and split:
+        comps = sorted(_split_wide(labels, comps, max(c[3] for c in comps)))
     if not comps:
         return []
     big = max(c[3] for c in comps)
@@ -109,6 +143,7 @@ def _sim(a: np.ndarray, b: np.ndarray) -> float:
 class GlyphReader:
     def __init__(self, folder: str, group: str):
         self.folder = os.path.join(folder, group)
+        self.split = group != "mult"  # police très grasse du multiplicateur : ne pas couper
         self.samples: dict[str, list[tuple[np.ndarray, float, float]]] = {}
         self.mode, self.feats, self.mode_ok = "enclosed", {}, {}
         meta = os.path.join(self.folder, "meta.json")
@@ -137,7 +172,7 @@ class GlyphReader:
         chars = list(text.lower().replace(" ", ""))
         # découpages qui retrouvent le bon nombre de caractères ; on garde le mode qui
         # marche sur le plus d'exemples
-        ok = {m: segment(roi, m) for m in MODES}
+        ok = {m: segment(roi, m, self.split) for m in MODES}
         ok = {m: g for m, g in ok.items() if len(g) == len(chars)}
         if not ok:
             return False
@@ -177,7 +212,7 @@ class GlyphReader:
         return None
 
     def _read_mode(self, roi, mode, min_score):
-        glyphs = segment(roi, mode)
+        glyphs = segment(roi, mode, self.split)
         if not glyphs:
             return None
         text = []

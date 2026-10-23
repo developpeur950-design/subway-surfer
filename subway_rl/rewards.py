@@ -37,7 +37,7 @@ class RewardConfig:
     # pour que l'agent ne soit pas récompensé "deux fois" pour une étoile.
     normalize_score_by_multiplier: bool = False
     # Garde-fou contre les erreurs d'OCR : un saut de score plus grand est ignoré.
-    max_points_per_step: int = 5000
+    max_points_per_step: int = 50000
 
     @classmethod
     def from_dict(cls, d: dict | None) -> "RewardConfig":

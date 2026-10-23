@@ -8,6 +8,7 @@
     python calibrate.py record --seconds 15        # enregistre des images -> calib/rec/ (pour les étoiles)
     python calibrate.py point                      # cliquez sur les boutons du jeu -> coordonnées
     python calibrate.py digits                     # apprend la police des chiffres du jeu
+    python calibrate.py player                     # encadrer le personnage sur ~30 images (détecteur)
     python calibrate.py test                       # affiche en direct ce que lit le HUD
     python calibrate.py keys                       # teste les commandes (gauche, droite, saut, roulade)
 
@@ -57,11 +58,12 @@ def select(img, title):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["screenshot", "record", "region", "template", "point", "digits", "test", "keys"])
+    ap.add_argument("cmd", choices=["screenshot", "record", "region", "template", "point", "digits", "player", "test", "keys"])
     ap.add_argument("name", nargs="?")
     ap.add_argument("--image")
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--seconds", type=float, default=15)
+    ap.add_argument("--every", type=int, default=8, help="player : une image sur N du dossier calib/rec")
     ap.add_argument("--margin", type=int, default=40,
                     help="template : marge (px) autour de la découpe où chercher l'image en jeu")
     ap.add_argument("--config", default=CONFIG)
@@ -176,6 +178,33 @@ def main():
             if all(not r.missing() for g_, r in readers.items() if g_ == "hud"):
                 print("Score et pièces OK. Continuez si le multiplicateur manque des chiffres, sinon q.")
 
+    elif args.cmd == "player":
+        # Encadrer le personnage sur des images variées, pour entraîner son détecteur
+        import glob
+        import json
+        import shutil
+        src = sorted(glob.glob("calib/rec/*.png"))[::args.every]
+        if not src:
+            raise SystemExit("Aucune image : lancez d'abord python calibrate.py record --seconds 60")
+        os.makedirs("calib/player", exist_ok=True)
+        meta = "calib/player/labels.json"
+        labels = json.load(open(meta, encoding="utf-8")) if os.path.exists(meta) else {}
+        print(f"{len(src)} images. Encadrez le personnage puis ENTRÉE ; ÉCHAP = image sans "
+              "personnage visible (passer) ; q dans le terminal = terminer.")
+        for k, path in enumerate(src):
+            name = f"rec{len(labels):04d}_{os.path.basename(path)}"
+            img = cv2.imread(path)
+            r = cv2.selectROI(f"Personnage {k + 1}/{len(src)} (déjà {len(labels)})", img, showCrosshair=False)
+            cv2.destroyAllWindows()
+            if r[2] > 0 and r[3] > 0:
+                shutil.copy(path, f"calib/player/{name}")
+                labels[name] = [int(r[0]), int(r[1]), int(r[0] + r[2]), int(r[1] + r[3])]
+                with open(meta, "w", encoding="utf-8") as f:
+                    json.dump(labels, f, indent=1)
+            if k % 10 == 9 and input(f"{len(labels)} images encadrées. Continuer ? (Entrée / q) ") == "q":
+                break
+        print(f"{len(labels)} images encadrées dans calib/player/. Entraînez : python train_player.py")
+
     elif args.cmd == "test":
         from subway_rl.hud import HudReader
         hud = HudReader(cfg["game"])
@@ -192,7 +221,7 @@ def main():
             extra += " | étoile: " + " ".join(f"{d.score(img):.2f}" for d in hud.star_detectors)
             pb = []
             for name, r in readers.items():
-                if r is None or r.status in ("ok", "à confirmer"):
+                if r is None or r.status in ("ok", "à confirmer", "saut à confirmer"):
                     continue
                 pb.append(f"{name} {r.status} (lu {r.last_raw})")
                 if saved.get(name, 0) < 30:  # garde une image des lectures ratées

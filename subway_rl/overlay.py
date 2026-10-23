@@ -16,6 +16,7 @@ Deux choses sont superposées à l'image du jeu :
 """
 from __future__ import annotations
 
+import os
 from collections import deque
 from dataclasses import dataclass
 
@@ -202,66 +203,74 @@ class ElementDiscovery:
 
 
 class PlayerTracker:
-    """Suit le personnage d'image en image (en bas, en l'air, dans la bulle...).
+    """Suit le personnage d'image en image (en bas, en l'air, sur un train, dans la bulle...).
 
-    Part de sa position habituelle (``home``, en fractions de l'image), puis cherche à chaque
-    image, autour de la dernière position, la zone qui ressemble le plus à son apparence.
-    Cette apparence est mise à jour petit à petit (éclairage, pose, bulle...). S'il est perdu,
-    ou s'il est de nouveau à sa place habituelle, le suivi se recale sur ``home``.
+    La caméra du jeu suit le personnage : il reste à peu près au centre horizontalement, et le
+    plus souvent en bas. On le cherche donc dans la colonne centrale de l'écran, en comparant
+    les CONTOURS (moins sensibles aux couleurs et à l'éclairage) à deux modèles : son apparence
+    de départ (fixe, empêche de dériver sur le décor) et son apparence récente (suit les
+    changements de pose, d'effets...). Les positions proches de la précédente et du centre
+    sont favorisées.
     """
 
-    def __init__(self, home=(0.39, 0.65, 0.59, 0.85), scale: float = 0.4, search: float = 0.12,
-                 update_rate: float = 0.15, min_score: float = 0.35, recenter_every: int = 20):
-        self.home, self.scale, self.search = home, scale, search
-        self.update_rate, self.min_score, self.recenter_every = update_rate, min_score, recenter_every
+    def __init__(self, home=(0.39, 0.65, 0.59, 0.85), scale: float = 0.3,
+                 column=(0.15, 0.85), update_rate: float = 0.1, min_score: float = 0.25,
+                 center_weight: float = 2.0, motion_weight: float = 1.0):
+        self.home, self.scale, self.column = home, scale, column
+        self.update_rate, self.min_score = update_rate, min_score
+        self.center_weight, self.motion_weight = center_weight, motion_weight
         self.reset()
 
     def reset(self):
-        self.tpl, self.box, self.lost, self.t, self.score = None, None, 0, 0, 0.0
+        self.anchor = self.tpl = self.box = None
+        self.t, self.score, self.bad = 0, 0.0, 0
+
+    @staticmethod
+    def _edges(img):
+        g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        gx, gy = cv2.Sobel(g, cv2.CV_32F, 1, 0), cv2.Sobel(g, cv2.CV_32F, 0, 1)
+        return cv2.GaussianBlur(cv2.magnitude(gx, gy), (3, 3), 0)
 
     def _home_box(self, w, h):
         x0, y0, x1, y1 = self.home
         return [int(x0 * w), int(y0 * h), max(4, int((x1 - x0) * w)), max(4, int((y1 - y0) * h))]
 
-    def _grab(self, img, b):
-        x, y, w, h = b
-        return img[y:y + h, x:x + w].astype(np.float32)
-
     def update(self, frame_bgr):
         img = cv2.resize(frame_bgr, None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_AREA)
-        h, w = img.shape[:2]
+        e = self._edges(img)
+        h, w = e.shape
         self.t += 1
-        if self.tpl is None or self.tpl.shape[:2] != tuple(self._home_box(w, h)[3:1:-1]):
-            self.box = self._home_box(w, h)
-            self.tpl = self._grab(img, self.box)
+        hb = self._home_box(w, h)
+        if self.anchor is None:
+            self.box = hb
+            self.anchor = e[hb[1]:hb[1] + hb[3], hb[0]:hb[0] + hb[2]].copy()
+            self.tpl = self.anchor.copy()
             return self._out()
-        x, y, bw, bh = self.box
-        m = int(self.search * max(w, h))
-        sx0, sy0 = max(0, x - m), max(0, y - m)
-        sx1, sy1 = min(w, x + bw + m), min(h, y + bh + m)
-        win = img[sy0:sy1, sx0:sx1].astype(np.float32)
+        bw, bh = hb[2], hb[3]
+        cx0, cx1 = int(self.column[0] * w), int(self.column[1] * w)
+        win = e[int(0.12 * h):, cx0:cx1]
         if win.shape[0] < bh or win.shape[1] < bw:
-            self.reset()
-            return None
-        res = cv2.matchTemplate(win, self.tpl, cv2.TM_CCOEFF_NORMED)
-        _, score, _, loc = cv2.minMaxLoc(res)
-        self.score = float(score)
-        if score < self.min_score:
-            self.lost += 1
-            if self.lost > 5:  # perdu : on repart de sa place habituelle
-                self.box = self._home_box(w, h)
-                self.tpl = self._grab(img, self.box)
-                self.lost = 0
             return self._out()
-        self.lost = 0
-        self.box = [sx0 + loc[0], sy0 + loc[1], bw, bh]
-        self.tpl += self.update_rate * (self._grab(img, self.box) - self.tpl)
-        # retour à sa place habituelle : on se recale pour éviter de dériver vers le décor
-        if self.t % self.recenter_every == 0:
-            hb = self._home_box(w, h)
-            home_score = cv2.matchTemplate(self._grab(img, hb), self.tpl, cv2.TM_CCOEFF_NORMED)[0, 0]
-            if home_score > score - 0.1:
-                self.box = hb
+        r = np.maximum(cv2.matchTemplate(win, self.anchor, cv2.TM_CCOEFF_NORMED),
+                       cv2.matchTemplate(win, self.tpl, cv2.TM_CCOEFF_NORMED))
+        # préférences : près du centre horizontal (la caméra suit) et près de la position précédente
+        ys, xs = np.mgrid[0:r.shape[0], 0:r.shape[1]]
+        px, py = xs + cx0, ys + int(0.12 * h)
+        dx_center = (px + bw / 2 - (hb[0] + bw / 2)) / w
+        dmove = np.hypot(px - self.box[0], py - self.box[1]) / max(w, h)
+        cost = r - self.center_weight * dx_center ** 2 - self.motion_weight * dmove ** 2
+        iy, ix = np.unravel_index(int(np.argmax(cost)), cost.shape)
+        self.score = float(r[iy, ix])
+        if self.score < self.min_score:
+            self.bad += 1
+            if self.bad > 10:  # perdu depuis 1 s : on repart de sa place habituelle
+                self.box, self.bad = hb, 0
+            return self._out()
+        self.bad = 0
+        self.box = [int(px[iy, ix]), int(py[iy, ix]), bw, bh]
+        patch = e[self.box[1]:self.box[1] + bh, self.box[0]:self.box[0] + bw]
+        if patch.shape == self.tpl.shape:
+            self.tpl += self.update_rate * (patch - self.tpl)
         return self._out()
 
     def _out(self):
@@ -301,6 +310,14 @@ class LiveOverlay:
         self.discovery = ElementDiscovery(**cfg.get("discovery", {}))
         # le personnage est suivi d'image en image (vrai jeu)
         self.tracker = PlayerTracker(**cfg.get("player_tracker", {}))
+        # détecteur entraîné sur vos images (calibrate.py player + train_player.py) : bien plus fiable
+        self.detector = None
+        det_path = cfg.get("player_detector", "models/player_detector.pt")
+        if det_path and not os.path.exists(det_path) and os.path.exists("pretrained/player_detector.pt"):
+            det_path = "pretrained/player_detector.pt"  # entraîné sur une vraie partie (même tenue)
+        if det_path and os.path.exists(det_path):
+            from .player_detector import PlayerDetector
+            self.detector = PlayerDetector(det_path)
         self.player_box = None
         self.display_height = cfg.get("display_height", 900)
         self.show_attention = cfg.get("show_attention", True)
@@ -383,7 +400,12 @@ class LiveOverlay:
             x0, y0, x1, y1 = info["player_zone"]
             self.player_box = (int(x0 * W), int(y0 * H), int((x1 - x0) * W), int((y1 - y0) * H))
             return info["player_zone"]
-        box = self.tracker.update(frame_bgr)
+        if self.detector is not None:
+            box = self.detector.find(frame_bgr)
+            if box is not None and self.player_box is not None:  # lissage léger
+                box = tuple(int(0.6 * a + 0.4 * b) for a, b in zip(box, self.player_box))
+        else:
+            box = self.tracker.update(frame_bgr)
         if "episode_totals" in info:
             self.tracker.reset()
         self.player_box = box
