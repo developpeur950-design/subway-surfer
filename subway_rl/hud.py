@@ -1,7 +1,8 @@
 """Lecture du HUD du vrai jeu à partir de captures d'écran.
 
-- Score, pièces et multiplicateur : OCR (Tesseract) sur des zones de l'écran
-  définies dans config.yaml (voir ``calibrate.py``).
+- Score, pièces et multiplicateur : lus avec la police du jeu apprise par
+  ``calibrate.py digits`` (voir glyphs.py), sinon OCR Tesseract, sur des zones de
+  l'écran définies dans config.yaml (voir ``calibrate.py``).
 - Mort et trébuchement (choc contre un mur) : détection par modèles d'images
   (template matching) capturés une fois avec ``calibrate.py``, plus une
   heuristique de secours pour la mort (image figée).
@@ -44,8 +45,10 @@ class NumberReader:
     """Lit un nombre affiché à l'écran, avec un filtre contre les erreurs d'OCR."""
 
     def __init__(self, region, monotonic: bool = True, max_jump: float | None = None,
-                 invert: bool = False, scale: float = 3.0, decimal: bool = False):
-        if pytesseract is None:
+                 invert: bool = False, scale: float = 3.0, decimal: bool = False, glyphs=None):
+        # glyphs : police du jeu apprise avec « calibrate.py digits » (bien plus fiable)
+        self.glyphs = glyphs
+        if pytesseract is None and glyphs is None:
             raise ImportError("pytesseract n'est pas installé (pip install pytesseract + binaire Tesseract)")
         self.region, self.monotonic, self.max_jump = region, monotonic, max_jump
         self.invert, self.scale, self.decimal = invert, scale, decimal
@@ -55,8 +58,20 @@ class NumberReader:
         self.value = value
         self._fresh = True  # la première lecture d'une partie est acceptée telle quelle
 
+    def _parse(self, text: str) -> float | None:
+        if self.decimal:  # ex : "x8,5" -> 8.5
+            m = re.search(r"\d+(?:[.,]\d+)?", text.replace(" ", ""))
+            return float(m.group().replace(",", ".")) if m else None
+        digits = re.sub(r"\D", "", text)  # ex : "151 877" -> 151877
+        return int(digits) if digits else None
+
     def raw_read(self, img: np.ndarray) -> float | None:
         roi = crop(img, self.region)
+        if self.glyphs is not None and self.glyphs.samples:
+            text = self.glyphs.read(roi)
+            return self._parse(text) if text else None
+        if pytesseract is None:
+            return None
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         gray = cv2.resize(gray, None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_CUBIC)
         # Le HUD de Subway Surfers = chiffres blancs avec contour sombre
@@ -66,11 +81,7 @@ class NumberReader:
         whitelist = "0123456789xX" + (",." if self.decimal else "")
         text = pytesseract.image_to_string(
             bw, config=f"--psm 7 -c tessedit_char_whitelist={whitelist}")
-        if self.decimal:  # ex : "x8,5" -> 8.5
-            m = re.search(r"\d+(?:[.,]\d+)?", text.replace(" ", ""))
-            return float(m.group().replace(",", ".")) if m else None
-        digits = re.sub(r"\D", "", text)  # ex : "151 877" -> 151877
-        return int(digits) if digits else None
+        return self._parse(text)
 
     def read(self, img: np.ndarray) -> float:
         v = self.raw_read(img)
@@ -110,11 +121,17 @@ class TemplateDetector:
 class HudReader:
     def __init__(self, cfg: dict):
         regions = cfg.get("regions", {})
-        self.score = NumberReader(regions["score"], max_jump=cfg.get("max_score_jump", 5000))
-        self.coins = NumberReader(regions["coins"], max_jump=50)
+        from .glyphs import GROUPS, GlyphReader
+        folder = cfg.get("digits_folder", "templates/digits")
+        g = {grp: GlyphReader(folder, grp) for grp in set(GROUPS.values())}
+        g = {k: (v if v.samples else None) for k, v in g.items()}
+        self.score = NumberReader(regions["score"], max_jump=cfg.get("max_score_jump", 5000),
+                                  glyphs=g[GROUPS["score"]])
+        self.coins = NumberReader(regions["coins"], max_jump=50, glyphs=g[GROUPS["coins"]])
         # Le multiplicateur est lu pour information (il peut changer pour d'autres
         # raisons que les étoiles) ; les étoiles sont détectées visuellement, voir read().
-        self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100, decimal=True)
+        self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100, decimal=True,
+                                  glyphs=g[GROUPS["multiplier"]])
                      if regions.get("multiplier") else None)
 
         def detectors(key):

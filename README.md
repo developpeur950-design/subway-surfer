@@ -127,6 +127,11 @@ python calibrate.py region score
 python calibrate.py region coins
 python calibrate.py region multiplier
 
+# b2) apprendre la police des chiffres du jeu (indispensable pour bien lire le score) :
+#     tapez ce que vous voyez dans chaque zone, sur plusieurs captures, jusqu'à ce que
+#     tous les chiffres 0-9 soient appris
+python calibrate.py digits
+
 # c) sur l'écran de fin de partie : un élément qui n'apparaît QUE là
 python calibrate.py screenshot
 python calibrate.py template death
@@ -146,6 +151,9 @@ python calibrate.py template star --image calib/rec/0123.png
 # f) positions des boutons (rejouer, pause, reprendre...) : cliquez dessus
 python calibrate.py point --image calib/screen.png
 ```
+
+Pour le multiplicateur, laissez de la marge autour de « x8,5 » : il devient plus large
+(« x11,3 ») et change de couleur en cours de partie.
 
 Copiez les coordonnées affichées par `point` dans `config.yaml` (`restart_sequence`,
 `pause_sequence`, `resume_sequence`). Prenez une capture de chaque écran concerné (écran de fin,

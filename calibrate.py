@@ -7,6 +7,7 @@
     python calibrate.py template death --image calib/screen.png    # découpe une image de référence
     python calibrate.py record --seconds 15        # enregistre des images -> calib/rec/ (pour les étoiles)
     python calibrate.py point                      # cliquez sur les boutons du jeu -> coordonnées
+    python calibrate.py digits                     # apprend la police des chiffres du jeu
     python calibrate.py test                       # affiche en direct ce que lit le HUD
     python calibrate.py keys                       # teste les commandes (gauche, droite, saut, roulade)
 
@@ -56,7 +57,7 @@ def select(img, title):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["screenshot", "record", "region", "template", "point", "test", "keys"])
+    ap.add_argument("cmd", choices=["screenshot", "record", "region", "template", "point", "digits", "test", "keys"])
     ap.add_argument("name", nargs="?")
     ap.add_argument("--image")
     ap.add_argument("--full", action="store_true")
@@ -133,6 +134,48 @@ def main():
             pass
         cv2.destroyAllWindows()
 
+    elif args.cmd == "digits":
+        # Apprend la forme des chiffres du jeu : on montre chaque zone, vous tapez ce qui est affiché
+        from subway_rl.glyphs import GROUPS, GlyphReader
+        folder = cfg["game"].get("digits_folder", "templates/digits")
+        readers = {grp: GlyphReader(folder, grp) for grp in set(GROUPS.values())}
+        regions = {k: v for k, v in cfg["game"]["regions"].items() if k in GROUPS and v}
+        print("Pour chaque zone, tapez EXACTEMENT ce qui est affiché (ex : 42 471, 74, x8,5),")
+        print("Entrée vide = passer cette zone, q = terminer.\n")
+        first = True
+        while True:
+            if args.image and first:
+                img = cv2.imread(args.image)
+            else:
+                input("Lancez/continuez une partie, puis appuyez sur Entrée pour capturer (3 s)... ")
+                time.sleep(3)
+                img = grab(cfg)
+            first = False
+            for name, (x, y, w, h) in regions.items():
+                roi = img[y:y + h, x:x + w]
+                cv2.imshow("Que lisez-vous ?", cv2.resize(roi, None, fx=4, fy=4, interpolation=cv2.INTER_NEAREST))
+                cv2.waitKey(300)
+                txt = input(f"  {name} : ").strip()
+                if txt.lower() == "q":
+                    cv2.destroyAllWindows()
+                    return
+                if not txt:
+                    continue
+                r = readers[GROUPS[name]]
+                if r.learn(roi, txt):
+                    print(f"    appris ({r.mode})")
+                else:
+                    print("    impossible de découper les caractères : agrandissez un peu la zone "
+                          f"(python calibrate.py region {name}) ou passez")
+            cv2.destroyAllWindows()
+            for grp, r in readers.items():
+                miss = r.missing()
+                names = " / ".join(k for k, v in GROUPS.items() if v == grp)
+                print(f"  {names} : " + (f"il manque encore les chiffres {' '.join(miss)}" if miss
+                                         else "tous les chiffres sont appris"))
+            if all(not r.missing() for g_, r in readers.items() if g_ == "hud"):
+                print("Score et pièces OK. Continuez si le multiplicateur manque des chiffres, sinon q.")
+
     elif args.cmd == "test":
         from subway_rl.hud import HudReader
         hud = HudReader(cfg["game"])
@@ -142,7 +185,7 @@ def main():
             s = hud.read(img)
             extra = " ".join(f"{d.score(img):.2f}" for d in hud.death_detectors)
             extra += " | étoile: " + " ".join(f"{d.score(img):.2f}" for d in hud.star_detectors)
-            print(f"score={s.score:>8} pièces={s.coins:>5} mult=x{s.multiplier:<3} étoiles={s.stars} "
+            print(f"score={s.score:>8} pièces={s.coins:>5} mult=x{s.multiplier:<5} étoiles={s.stars} "
                   f"mort={s.dead} choc={s.stumbled}  [similarité mort: {extra}]")
             time.sleep(0.2)
 
