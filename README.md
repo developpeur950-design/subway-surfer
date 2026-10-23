@@ -133,65 +133,65 @@ Laissez le téléphone **sur son chargeur secteur** : l'entraînement dure des h
 
 ## 3. Calibrer (une seule fois)
 
-Les commandes `screenshot` attendent 3 s. Dans les fenêtres de sélection : tracez un rectangle à
-la souris puis ENTRÉE.
+Vos réglages sont enregistrés dans **`config.local.yaml`** : les mises à jour du projet
+(`git pull`) ne le touchent jamais. Les commandes `screenshot` et `record` attendent 3 s.
+Dans les fenêtres de sélection : tracez un rectangle à la souris puis ENTRÉE.
 
 ```powershell
 # a) où est l'écran du téléphone dans la fenêtre scrcpy
 python calibrate.py screenshot --full
 python calibrate.py region capture --image calib/full.png
 
-# b) pendant une partie : les chiffres du HUD (encadrez juste les chiffres)
+# b) pendant une partie : les zones du HUD (encadrez les chiffres avec un peu de marge)
 python calibrate.py screenshot
 python calibrate.py region score
-python calibrate.py region coins
-python calibrate.py region multiplier
+python calibrate.py region coins          # le nombre seul, SANS l'icône de la pièce
+python calibrate.py region multiplier     # « x8,5 » avec de la marge (il grossit et change de couleur)
+python calibrate.py digits                # apprend la police des chiffres (plusieurs captures)
 
-# b2) apprendre la police des chiffres du jeu (indispensable pour bien lire le score) :
-#     tapez ce que vous voyez dans chaque zone, sur plusieurs captures, jusqu'à ce que
-#     tous les chiffres 0-9 soient appris
-python calibrate.py digits
-
-# c) sur l'écran de fin de partie : un élément qui n'apparaît QUE là
-python calibrate.py screenshot
-python calibrate.py template death
-
-# d) (recommandé) juste après un choc sur le flanc d'un train : le garde (et son chien) qui
-#    apparaît en bas à gauche de l'écran ; encadrez sa tête/casquette
-python calibrate.py screenshot
-python calibrate.py template stumble
-
-# e) étoiles secrètes : enregistrez ~15 s de jeu en ramassant une étoile secrète, puis dans
-#    calib/rec/ choisissez une image où le bandeau est affiché et encadrez UNIQUEMENT le texte
-#    « ÉTOILE SECRÈTE » (pas le nom en dessous, qui change d'une étoile à l'autre)
-python calibrate.py record --seconds 15
-python calibrate.py template star --image calib/rec/0123.png
-#    (refaites-le 2 ou 3 fois avec d'autres images : star_2.png, star_3.png...)
-
-# f) positions des boutons (rejouer, pause, reprendre...) : cliquez dessus
-python calibrate.py point --image calib/screen.png
+# c) « en jeu » : le bouton pause jaune en haut à gauche (sur la même capture de partie)
+python calibrate.py template ingame
 ```
 
-Pour le multiplicateur, laissez de la marge autour de « x8,5 » : il devient plus large
-(« x11,3 ») et change de couleur en cours de partie.
+**Relance automatique des parties.** Le programme reconnaît les boutons des écrans qui suivent
+une mort et clique dessus jusqu'à revenir en jeu. Capturez chaque écran (avec `record`, puis
+choisissez l'image dans `calib/rec/`) et encadrez le bouton :
 
-Copiez les coordonnées affichées par `point` dans `config.yaml` (`restart_sequence`,
-`pause_sequence`, `resume_sequence`). Prenez une capture de chaque écran concerné (écran de fin,
-résultats, menu pause) pour relever tous les boutons. Un clic droit dans scrcpy = touche Retour.
-
-Vérifiez ensuite :
 ```powershell
-python calibrate.py test     # pendant une partie : score/pièces corrects, étoiles +1 à chaque étoile, mort=True à la fin
+python calibrate.py record --seconds 40        # mourez, puis laissez défiler jusqu'au menu
+python calibrate.py template terminer --image calib/rec/XXXX.png   # « APPUIE POUR TERMINER LA COURSE »
+python calibrate.py template continuer --image calib/rec/XXXX.png  # bouton orange CONTINUER (scores)
+python calibrate.py template course --image calib/rec/XXXX.png     # bouton COURSE du menu
+```
+
+⚠️ Sur l'écran « Continuer la course ? », n'encadrez **jamais** le bouton qui dépense des clés :
+encadrez le texte « APPUIE POUR TERMINER LA COURSE ». Si une fenêtre surprise bloque (pub,
+récompense), capturez sa croix : `python calibrate.py template fermer --image ...`.
+Pour la pause pendant l'apprentissage, capturez aussi le bouton pour reprendre :
+`python calibrate.py template reprendre --image ...` (le bouton pause = image `ingame`).
+
+**Étoiles et chocs** (sans eux, ces récompenses ne sont jamais données) :
+
+```powershell
+python calibrate.py record --seconds 20        # ramassez une étoile secrète
+python calibrate.py template star --image calib/rec/XXXX.png       # le texte « ÉTOILE SECRÈTE » seul
+python calibrate.py record --seconds 15        # cognez-vous sur le flanc d'un train
+python calibrate.py template stumble --image calib/rec/XXXX.png    # la tête du garde, en bas à gauche
+```
+
+Vérifiez en jouant :
+```powershell
+python calibrate.py test     # score, pièces, étoiles, choc, en_jeu=True pendant la partie, mort=True à la fin
 python calibrate.py keys     # le personnage doit aller à gauche, droite, sauter, rouler
 ```
 
-Pour l'étoile, n'encadrez que le texte « ÉTOILE SECRÈTE » : il est identique à chaque fois, alors
-que le nom de l'étoile (« TOMBER AVEC PANACHE »…) et l'icône peuvent changer. Si `test` compte
-des étoiles en trop, montez `threshold` (0.85–0.9) pour `star` dans `config.yaml` ; s'il n'en
-compte pas, baissez-le (0.7) ou ajoutez une autre image.
-
-Sans la capture `stumble`, la pénalité pour les chocs contre un mur ne s'applique jamais (la mort,
-elle, est toujours détectée).
+Si vous aviez calibré avec une ancienne version (réglages dans `config.yaml`), récupérez-les :
+```powershell
+copy config.yaml config.ancien.yaml
+git checkout -- config.yaml
+git pull origin claude/youthful-albattani-m7ol59
+python migrer_config.py config.ancien.yaml
+```
 
 ## 4. Entraîner
 

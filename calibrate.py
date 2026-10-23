@@ -23,21 +23,25 @@ import time
 
 import cv2
 import numpy as np
-import yaml
-
 import subway_rl.controls  # noqa: F401  (active les coordonnées en pixels réels sous Windows)
+
+from subway_rl.config import load_config, load_local, save_local
 
 CONFIG = "config.yaml"
 
 
 def load(path):
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    return load_config(path)  # config.yaml + vos réglages (config.local.yaml)
 
 
-def save(cfg, path):
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
+def set_local(path, keys, value):
+    """Enregistre un réglage de calibration dans config.local.yaml (jamais écrasé par git pull)."""
+    local = load_local(path)
+    d = local
+    for k in keys[:-1]:
+        d = d.setdefault(k, {})
+    d[keys[-1]] = value
+    return save_local(local, path)
 
 
 def grab(cfg, full=False):
@@ -97,17 +101,17 @@ def main():
         img = cv2.imread(args.image or "calib/screen.png")
         x, y, w, h = select(img, f"Zone : {args.name}")
         if args.name == "capture":
-            cfg["game"]["capture"] = {"left": x, "top": y, "width": w, "height": h}
+            out = set_local(args.config, ["game", "capture"], {"left": x, "top": y, "width": w, "height": h})
         else:
-            cfg["game"].setdefault("regions", {})[args.name] = [x, y, w, h]
-        save(cfg, args.config)
-        print(f"{args.name} = {[x, y, w, h]} enregistré dans {args.config}")
+            out = set_local(args.config, ["game", "regions", args.name], [x, y, w, h])
+        print(f"{args.name} = {[x, y, w, h]} enregistré dans {out}")
 
     elif args.cmd == "template":
         img = cv2.imread(args.image or "calib/screen.png")
         x, y, w, h = select(img, f"Modèle : {args.name}")
         os.makedirs("templates", exist_ok=True)
-        lst = cfg["game"].setdefault("templates", {}).setdefault(args.name, [])
+        lst = list(cfg["game"].get("templates", {}).get(args.name) or [])
+        lst = [t for t in lst if os.path.exists(t["path"])]  # oublie les images supprimées
         # plusieurs images possibles par événement : star.png, star_2.png, ...
         path = f"templates/{args.name}.png" if not lst else f"templates/{args.name}_{len(lst) + 1}.png"
         cv2.imwrite(path, img[y:y + h, x:x + w])
@@ -116,7 +120,7 @@ def main():
         x0, y0 = max(0, x - m), max(0, y - m)
         region = [x0, y0, min(img.shape[1], x + w + m) - x0, min(img.shape[0], y + h + m) - y0]
         lst.append({"path": path, "region": region, "threshold": 0.8})
-        save(cfg, args.config)
+        set_local(args.config, ["game", "templates", args.name], lst)
         print(f"Modèle enregistré : {path} (zone de recherche {region})")
 
     elif args.cmd == "point":
@@ -230,7 +234,7 @@ def main():
                     cv2.imwrite(f"calib/debug/{name}_{i:05d}_{r.status}_{r.last_raw}.png".replace(" ", ""),
                                 img[y:y + h, x:x + w])
             print(f"score={s.score:>8} pièces={s.coins:>5} mult=x{s.multiplier:<5} étoiles={s.stars} "
-                  f"mort={s.dead} choc={s.stumbled}  [similarité mort: {extra}]"
+                  f"mort={s.dead} choc={s.stumbled} en_jeu={hud.in_game(img)}  [similarité mort: {extra}]"
                   + (f"  !! {', '.join(pb)}" if pb else ""))
             time.sleep(0.2)
 

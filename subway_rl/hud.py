@@ -175,6 +175,18 @@ class TemplateDetector:
     def __call__(self, img: np.ndarray) -> bool:
         return self.score(img) >= self.threshold
 
+    def locate(self, img: np.ndarray):
+        """Centre (x, y) de l'image trouvée dans la capture, ou None (pour cliquer un bouton)."""
+        area = crop(img, self.region) if self.region else img
+        if area.shape[0] < self.tpl.shape[0] or area.shape[1] < self.tpl.shape[1]:
+            return None
+        res = cv2.matchTemplate(area, self.tpl, cv2.TM_CCOEFF_NORMED)
+        _, score, _, (x, y) = cv2.minMaxLoc(res)
+        if score < self.threshold:
+            return None
+        ox, oy = (self.region[0], self.region[1]) if self.region else (0, 0)
+        return ox + x + self.tpl.shape[1] // 2, oy + y + self.tpl.shape[0] // 2
+
 
 class HudReader:
     def __init__(self, cfg: dict):
@@ -207,6 +219,10 @@ class HudReader:
             return out
 
         self.death_detectors = detectors("death")
+        # bouton pause jaune : visible uniquement pendant une partie. S'il disparaît assez
+        # longtemps, la partie est finie (plus fiable que l'écran de fin, qui varie)
+        self.ingame_detectors = detectors("ingame")
+        self.ingame_missing_for_death = cfg.get("ingame_missing_for_death", 8)
         self.stumble_detectors = detectors("stumble")
         self.star_detectors = detectors("star")
         self.frozen_frames_for_death = cfg.get("frozen_frames_for_death", 15)
@@ -225,7 +241,14 @@ class HudReader:
         self.multiplier, self.stars = None, 0  # None = valeur de base pas encore lue
         self._star_seen = False
         self._prev_small, self._frozen = None, 0
+        self._missing = 0
         self._stumble_cd, self._star_cd = 0, 0
+
+    def in_game(self, img) -> bool:
+        """Vrai si une partie est en cours (bouton pause visible). Sans image « ingame » : None."""
+        if not self.ingame_detectors:
+            return None
+        return any(d(img) for d in self.ingame_detectors)
 
     def _is_frozen(self, img) -> bool:
         small = cv2.resize(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), (64, 64)).astype(np.int16)
@@ -236,6 +259,9 @@ class HudReader:
 
     def read(self, img: np.ndarray) -> HudState:
         dead = any(d(img) for d in self.death_detectors) or self._is_frozen(img)
+        if self.ingame_detectors:
+            self._missing = 0 if self.in_game(img) else self._missing + 1
+            dead = dead or self._missing >= self.ingame_missing_for_death
 
         stumbled = False
         self._stumble_cd = max(0, self._stumble_cd - 1)

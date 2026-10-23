@@ -10,19 +10,16 @@ from __future__ import annotations
 import argparse
 import os
 
-import yaml
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecFrameStack
 
 from subway_rl.callbacks import LiveOverlayCallback, PauseGameDuringUpdate, RewardBreakdownCallback
+from subway_rl.config import load_config  # noqa: F401  (aussi utilisé par play.py)
 from subway_rl.curiosity import VecRND
 
 
-def load_config(path: str) -> dict:
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 def build_env(kind: str, cfg: dict, n_envs: int, seed: int = 0):

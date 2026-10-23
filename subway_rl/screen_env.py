@@ -14,7 +14,8 @@ import numpy as np
 from gymnasium import spaces
 
 from .controls import ScreenCapture, make_controller
-from .hud import HudReader
+from .hud import HudReader, TemplateDetector
+from .restart import Restarter
 from .rewards import RewardConfig, RewardTracker
 
 
@@ -34,6 +35,7 @@ class SubwayScreenEnv(gym.Env):
         self.capture = ScreenCapture(g["capture"])
         self.controller = make_controller(g)
         self.hud = HudReader(g)
+        self.restarter = Restarter(g, self.controller, self.capture, self.hud)
         self.tracker = RewardTracker(RewardConfig.from_dict(cfg.get("rewards")))
 
         ch = 1 if self.grayscale else 3
@@ -58,17 +60,35 @@ class SubwayScreenEnv(gym.Env):
             time.sleep(dt)
         self._t_last = time.time()
 
+    def _click_template(self, name) -> bool:
+        img = self.capture.grab()
+        for t in self.cfg["game"].get("templates", {}).get(name) or []:
+            try:
+                pos = TemplateDetector(t["path"], t.get("region"), t.get("threshold", 0.8)).locate(img)
+            except FileNotFoundError:
+                continue
+            if pos is not None:
+                self.controller.click(*pos)
+                return True
+        return False
+
     def pause(self):
-        self.controller.run_sequence(self.cfg["game"].get("pause_sequence"))
+        # le bouton pause (image « ingame ») sert à mettre en pause ; sinon pause_sequence
+        if not self._click_template("ingame"):
+            self.controller.run_sequence(self.cfg["game"].get("pause_sequence"))
 
     def resume(self):
-        self.controller.run_sequence(self.cfg["game"].get("resume_sequence"))
+        time.sleep(0.5)
+        if self._click_template("reprendre"):
+            time.sleep(self.cfg["game"].get("resume_wait", 3.0))  # compte à rebours
+        else:
+            self.controller.run_sequence(self.cfg["game"].get("resume_sequence"))
         self._t_last = time.time()
 
     # ------------------------------------------------------------------
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        self.controller.run_sequence(self.cfg["game"].get("restart_sequence"))
+        self.restarter.restart()  # reconnaît les boutons à l'écran et relance une partie
         self.hud.reset()
         frame = self.capture.grab()
         # on attend que la partie ait vraiment commencé (plus d'écran de mort)

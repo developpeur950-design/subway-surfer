@@ -6,3 +6,6 @@ logs/
 calib/
 *.zip
 .venv/
+config.local.yaml
+config.ancien.yaml
+templates/

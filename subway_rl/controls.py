@@ -53,6 +53,10 @@ class KeyboardController:
         elif key:
             self.pg.press(key)
 
+    def click(self, x, y):
+        """Clic à la position (x, y) de la zone du jeu."""
+        self.pg.click(self.region["left"] + int(x), self.region["top"] + int(y))
+
     def run_sequence(self, steps):
         """Étapes : {"key": "space"}, {"click": [x, y]} (coord. dans la zone du jeu), {"wait": 1.5}."""
         for st in steps or []:
@@ -103,6 +107,9 @@ class AdbController:
         self.serial = a.get("serial")
         self.w, self.h = a.get("device_width", 1080), a.get("device_height", 2400)
         self.duration = a.get("swipe_ms", 60)
+        cap = cfg.get("capture", {})
+        self.sx = self.w / cap.get("width", self.w)   # zone capturée -> pixels de l'appareil
+        self.sy = self.h / cap.get("height", self.h)
         cmd = ["adb"] + (["-s", self.serial] if self.serial else []) + ["shell"]
         # un shell adb persistant : bien plus rapide qu'un processus par geste
         self.shell = subprocess.Popen(cmd, stdin=subprocess.PIPE, text=True)
@@ -129,6 +136,9 @@ class AdbController:
         elif action == 5:
             self._send(f"input tap {self.w // 2} {self.h // 2}")
             self._send(f"input tap {self.w // 2} {self.h // 2}")
+
+    def click(self, x, y):
+        self._send(f"input tap {int(x * self.sx)} {int(y * self.sy)}")
 
     def run_sequence(self, steps):
         """Étapes : {"tap": [x, y]} (pixels de l'appareil), {"key": "BACK"}, {"wait": 1.5}."""

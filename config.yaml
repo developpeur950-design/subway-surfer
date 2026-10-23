@@ -82,18 +82,34 @@ game:
     coins: [404, 76, 52, 28]        # « 206 » à côté de la pièce
     multiplier: [72, 66, 118, 44]   # « x8,5 » / « x11,3 » (informatif ; mettre null si inutile)
 
-  # Images de référence (capturées avec calibrate.py)
+  # Images de référence (capturées avec calibrate.py template <nom>) ; VOS images sont
+  # enregistrées dans config.local.yaml, qui remplace ces listes vides.
   templates:
-    death:                     # écran de fin de partie / "Continuer ?"
-      - {path: templates/death.png, threshold: 0.8}
+    ingame: []                 # le bouton pause jaune : visible seulement EN JEU (mort, relance, pause)
+    death: []                  # (facultatif) un élément de l'écran « Continuer la course ? »
     stumble: []                # le garde (et son chien) qui apparaît en bas à gauche après un choc
     #  - {path: templates/stumble.png, region: [0, 300, 800, 300], threshold: 0.75}
     star: []                   # le bandeau « ÉTOILE SECRÈTE » (calibrate.py record + template star)
+    # boutons cliqués automatiquement pour relancer une partie (voir restart_buttons)
+    terminer: []               # le texte « APPUIE POUR TERMINER LA COURSE » (PAS le bouton à clés !)
+    continuer: []              # le bouton orange CONTINUER de l'écran des scores
+    course: []                 # le bouton COURSE du menu
+    fermer: []                 # croix d'une fenêtre surprise (pub, récompense...)
+    reprendre: []              # le bouton pour reprendre après une pause
+  ingame_missing_for_death: 8  # bouton pause absent pendant N pas (~0,8 s) = partie finie
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 10
   max_score_jump: 50000        # les bonus du jeu peuvent ajouter plusieurs milliers de points d un coup
   star_cooldown_steps: 3       # pas minimum entre deux étoiles comptées
 
+  # Relance automatique : les boutons sont cherchés à l'écran et cliqués dans cet ordre
+  # jusqu'à ce que le bouton pause (ingame) réapparaisse
+  restart_buttons: [terminer, continuer, course, fermer]
+  restart_timeout: 60          # secondes max pour revenir en jeu
+  restart_click_wait: 1.5
+  resume_wait: 3.0             # compte à rebours après « reprendre »
+
+  # Clics de secours, si aucun bouton n'est reconnu (et ancienne méthode sans images de boutons)
   # Séquences d'actions : {click: [x, y]} dans la zone capturée, {key: ...}, {wait: secondes}
   # Relevez les positions des boutons avec : python calibrate.py point
   # (dans scrcpy, un clic droit = touche Retour d'Android)
