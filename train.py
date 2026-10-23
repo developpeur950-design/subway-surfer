@@ -111,6 +111,7 @@ def make_overlay(cfg: dict, env_kind: str, show: bool = True, video: str | None 
     g = cfg.get("game", {})
     pos, crop = None, (0.0, 1.0)
     if env_kind == "screen":
+        ocfg["away_templates"] = g.get("templates", {}).get("away", [])
         c = g["capture"]
         pos = (c["left"] + c["width"] + 10, max(0, c["top"] - 30))  # à droite de scrcpy
         crop = tuple(g.get("obs_crop_y", [0.0, 1.0]))

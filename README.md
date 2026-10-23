@@ -132,7 +132,8 @@ python calibrate.py region multiplier
 python calibrate.py screenshot
 python calibrate.py template death
 
-# d) (recommandé) juste après un choc sur le flanc d'un train : le garde qui apparaît derrière
+# d) (recommandé) juste après un choc sur le flanc d'un train : le garde (et son chien) qui
+#    apparaît en bas à gauche de l'écran ; encadrez sa tête/casquette
 python calibrate.py screenshot
 python calibrate.py template stumble
 
@@ -199,6 +200,14 @@ Une fenêtre s'ouvre à droite de scrcpy avec un cadre autour de chaque élémen
 - **La carte de chaleur** (rouge/jaune) montre où le réseau qui joue regarde pour décider ;
   « att 60 % » indique l'attention qu'il porte à un élément.
 - **Le panneau de droite** liste les types découverts avec leurs gains et dangers moyens.
+
+Le personnage est cherché dans une zone fixe en bas au centre (`player_zone`), car la caméra
+le suit. Quand il est ailleurs (dans la bulle, en haut de l'écran), capturez la bulle une fois
+pour que ces moments soient ignorés :
+```powershell
+python calibrate.py record --seconds 15        # attrapez une bulle pendant l'enregistrement
+python calibrate.py template away --image calib/rec/XXXX.png   # encadrez le bord de la bulle
+```
 
 Ces étiquettes s'affinent au fil des parties. Les premières minutes, presque tout est « ? ».
 Ajoutez `--overlay-video partie.mp4` pour enregistrer l'affichage. Réglages dans `config.yaml`,

@@ -161,6 +161,9 @@ class ElementDiscovery:
         pièces APRÈS avoir été pris), le danger sur ``danger_horizon`` pas seulement.
         """
         H, W = frame_shape[:2]
+        if player_zone == "absent":  # personnage introuvable : on n'attribue rien
+            elements = []
+            player_zone = (0, 0, 0, 0)
         x0, y0, x1, y1 = player_zone or self.player_zone
         px0, py0, px1, py1 = x0 * W, y0 * H, x1 * W, y1 * H
         here = set()
@@ -221,6 +224,11 @@ class LiveOverlay:
                  show: bool = True, crop_y=(0.0, 1.0)):
         cfg = cfg or {}
         self.discovery = ElementDiscovery(**cfg.get("discovery", {}))
+        # états où le personnage n'est plus en bas de l'écran (bulle...) : images de référence
+        from .hud import TemplateDetector
+        self.away = [TemplateDetector(t["path"], t.get("region"), t.get("threshold", 0.7))
+                     for t in cfg.get("away_templates", []) if cv2.haveImageReader(t["path"])]
+        self.player_away = False
         self.display_height = cfg.get("display_height", 900)
         self.show_attention = cfg.get("show_attention", True)
         self.every = max(1, cfg.get("every_n_steps", 1))
@@ -240,7 +248,7 @@ class LiveOverlay:
         danger = parts.get("stumble", 0.0) + parts.get("death", 0.0)
         self.discovery.learn_values(elements, frame_bgr.shape, gain, danger,
                                     episode_end="episode_totals" in info,
-                                    player_zone=info.get("player_zone"))
+                                    player_zone=self._player_zone(frame_bgr, elements, info))
         if self.step % self.every:
             return
 
@@ -277,6 +285,14 @@ class LiveOverlay:
             cv2.putText(img, label, (x + 2, max(th_, y - 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                         (0, 0, 0), 1, cv2.LINE_AA)
 
+        if "player_zone" not in info:  # zone du personnage (vrai jeu)
+            x0, y0, x1, y1 = self.discovery.player_zone
+            p0 = (int(x0 * W * scale), int(y0 * H * scale))
+            p1 = (int(x1 * W * scale), int(y1 * H * scale))
+            col = (120, 120, 120) if self.player_away else (255, 255, 255)
+            cv2.rectangle(img, p0, p1, col, 1)
+            txt = "personnage ailleurs (bulle...)" if self.player_away else "zone du personnage"
+            cv2.putText(img, txt, (p0[0], p1[1] + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.45, col, 1, cv2.LINE_AA)
         img = np.hstack([img, self._panel(img.shape[0], info, action)])
         if self.video_path:
             if self.writer is None:
@@ -288,6 +304,14 @@ class LiveOverlay:
             if self.window_pos and self.step <= self.every:
                 cv2.moveWindow(self.title, *self.window_pos)
             cv2.waitKey(1)
+
+    def _player_zone(self, frame_bgr, elements, info):
+        """Zone du personnage : donnée par le simulateur, sinon zone fixe en bas au centre
+        (la caméra suit le personnage), sauf s'il est ailleurs (bulle...) : on n'attribue rien."""
+        if info.get("player_zone"):
+            return info["player_zone"]
+        self.player_away = any(d(frame_bgr) for d in self.away)
+        return "absent" if self.player_away else None
 
     def _panel(self, h, info, action):
         p = np.full((h, 260, 3), 25, np.uint8)

@@ -47,7 +47,7 @@ overlay:
     # ne chercher des éléments que sur les rails (trapèze, fractions x/y de l'image) :
     # le décor qui défile sur les côtés et les icônes à droite sont ignorés
     roi: [[0.25, 0.22], [0.75, 0.22], [1.0, 0.92], [0.0, 0.92]]
-    player_zone: [0.33, 0.6, 0.67, 0.86]  # où se trouve le personnage (x0, y0, x1, y1 en fractions)
+    player_zone: [0.33, 0.58, 0.67, 0.86] # zone du personnage (la caméra le suit : toujours en bas au centre)
     obstacle_factor: 1.5       # OBSTACLE si suivi de chocs/morts 1,5x plus que la moyenne (cadre rouge)
     bonus_factor: 1.5          # BONUS si suivi de pièces/étoiles 1,5x plus que la moyenne (cadre vert)
     bonus_horizon: 12          # pas (~1 s) pendant lesquels les gains comptent après un contact
@@ -83,6 +83,7 @@ game:
       - {path: templates/death.png, threshold: 0.8}
     stumble: []                # le garde (et son chien) qui apparaît en bas à gauche après un choc
     #  - {path: templates/stumble.png, region: [0, 300, 800, 300], threshold: 0.75}
+    away: []                   # écrans où le personnage n'est pas en bas (la bulle) : pour les cadres
     star: []                   # le bandeau « ÉTOILE SECRÈTE » (calibrate.py record + template star)
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 10
