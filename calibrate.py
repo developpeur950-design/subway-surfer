@@ -5,6 +5,7 @@
     python calibrate.py region coins
     python calibrate.py region multiplier
     python calibrate.py template death --image calib/screen.png    # découpe une image de référence
+    python calibrate.py record --seconds 15        # enregistre des images -> calib/rec/ (pour les étoiles)
     python calibrate.py point                      # cliquez sur les boutons du jeu -> coordonnées
     python calibrate.py test                       # affiche en direct ce que lit le HUD
     python calibrate.py keys                       # teste les commandes (gauche, droite, saut, roulade)
@@ -55,10 +56,13 @@ def select(img, title):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["screenshot", "region", "template", "point", "test", "keys"])
+    ap.add_argument("cmd", choices=["screenshot", "record", "region", "template", "point", "test", "keys"])
     ap.add_argument("name", nargs="?")
     ap.add_argument("--image")
     ap.add_argument("--full", action="store_true")
+    ap.add_argument("--seconds", type=float, default=15)
+    ap.add_argument("--margin", type=int, default=40,
+                    help="template : marge (px) autour de la découpe où chercher l'image en jeu")
     ap.add_argument("--config", default=CONFIG)
     args = ap.parse_args()
     cfg = load(args.config)
@@ -70,6 +74,21 @@ def main():
         time.sleep(3)
         cv2.imwrite(out, grab(cfg, args.full))
         print(f"-> {out}")
+
+    elif args.cmd == "record":
+        # Pour capturer un événement bref (ramassage d'une étoile, choc...) :
+        # jouez pendant l'enregistrement puis choisissez la bonne image dans calib/rec/
+        out = "calib/rec"
+        os.makedirs(out, exist_ok=True)
+        print(f"Enregistrement de {args.seconds:.0f} s dans 3 s... ramassez une étoile !")
+        time.sleep(3)
+        t0, i = time.time(), 0
+        while time.time() - t0 < args.seconds:
+            cv2.imwrite(f"{out}/{i:04d}.png", grab(cfg))
+            i += 1
+            time.sleep(0.05)
+        print(f"{i} images dans {out}/ : trouvez celle où l'étoile est ramassée, puis\n"
+              f"  python calibrate.py template star --image {out}/XXXX.png")
 
     elif args.cmd == "region":
         img = cv2.imread(args.image or "calib/screen.png")
@@ -85,13 +104,17 @@ def main():
         img = cv2.imread(args.image or "calib/screen.png")
         x, y, w, h = select(img, f"Modèle : {args.name}")
         os.makedirs("templates", exist_ok=True)
-        path = f"templates/{args.name}.png"
-        cv2.imwrite(path, img[y:y + h, x:x + w])
         lst = cfg["game"].setdefault("templates", {}).setdefault(args.name, [])
-        if not any(t["path"] == path for t in lst):
-            lst.append({"path": path, "threshold": 0.8})
+        # plusieurs images possibles par événement : star.png, star_2.png, ...
+        path = f"templates/{args.name}.png" if not lst else f"templates/{args.name}_{len(lst) + 1}.png"
+        cv2.imwrite(path, img[y:y + h, x:x + w])
+        # on ne cherchera l'image qu'autour de l'endroit où elle apparaît (moins de fausses alertes)
+        m = args.margin
+        x0, y0 = max(0, x - m), max(0, y - m)
+        region = [x0, y0, min(img.shape[1], x + w + m) - x0, min(img.shape[0], y + h + m) - y0]
+        lst.append({"path": path, "region": region, "threshold": 0.8})
         save(cfg, args.config)
-        print(f"Modèle enregistré : {path}")
+        print(f"Modèle enregistré : {path} (zone de recherche {region})")
 
     elif args.cmd == "point":
         # Donne les coordonnées des boutons (Jouer, Pause...) pour restart/pause/resume_sequence
@@ -118,6 +141,7 @@ def main():
             img = grab(cfg)
             s = hud.read(img)
             extra = " ".join(f"{d.score(img):.2f}" for d in hud.death_detectors)
+            extra += " | étoile: " + " ".join(f"{d.score(img):.2f}" for d in hud.star_detectors)
             print(f"score={s.score:>8} pièces={s.coins:>5} mult=x{s.multiplier:<3} étoiles={s.stars} "
                   f"mort={s.dead} choc={s.stumbled}  [similarité mort: {extra}]")
             time.sleep(0.2)

@@ -99,10 +99,9 @@ class HudReader:
         regions = cfg.get("regions", {})
         self.score = NumberReader(regions["score"], max_jump=cfg.get("max_score_jump", 5000))
         self.coins = NumberReader(regions["coins"], max_jump=50)
-        # Dans Subway Surfers City, chaque étoile ramassée fait +1 au multiplicateur de la
-        # partie : il ne fait que monter, et rarement de plus de 1 ou 2 d'un coup.
-        self.mult = (NumberReader(regions["multiplier"], monotonic=True,
-                                  max_jump=cfg.get("max_stars_per_step", 3))
+        # Le multiplicateur est lu pour information (il peut changer pour d'autres
+        # raisons que les étoiles) ; les étoiles sont détectées visuellement, voir read().
+        self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100)
                      if regions.get("multiplier") else None)
 
         def detectors(key):
@@ -119,6 +118,10 @@ class HudReader:
         self.star_detectors = detectors("star")
         self.frozen_frames_for_death = cfg.get("frozen_frames_for_death", 15)
         self.stumble_cooldown = cfg.get("stumble_cooldown_steps", 10)
+        self.star_cooldown = cfg.get("star_cooldown_steps", 3)
+        if not self.star_detectors:
+            print("[hud] aucune image 'star' : les étoiles ne seront pas récompensées "
+                  "(voir calibrate.py record / template star)")
         self.reset()
 
     def reset(self):
@@ -127,7 +130,7 @@ class HudReader:
         if self.mult:
             self.mult.reset(1)
         self.multiplier, self.stars = None, 0  # None = valeur de base pas encore lue
-        self._base_mult = 1
+        self._star_seen = False
         self._prev_small, self._frozen = None, 0
         self._stumble_cd, self._star_cd = 0, 0
 
@@ -146,18 +149,18 @@ class HudReader:
         if self._stumble_cd == 0 and any(d(img) for d in self.stumble_detectors):
             stumbled, self._stumble_cd = True, self.stumble_cooldown
 
-        # Étoiles : chaque +1 du multiplicateur affiché = une étoile ramassée.
-        # Sans zone "multiplier", on se rabat sur l'image de l'étoile (si capturée).
-        self._star_cd = max(0, self._star_cd - 1)
         if self.mult:
-            m = self.mult.read(img)
-            if self.multiplier is None:
-                self._base_mult = m  # multiplicateur de départ (améliorations permanentes)
-            self.multiplier = max(1, m)
-            self.stars = max(self.stars, m - self._base_mult)
-        elif self._star_cd == 0 and any(d(img) for d in self.star_detectors):
+            self.multiplier = max(1, self.mult.read(img))
+
+        # Étoile ramassée : l'effet visuel de ramassage (image de référence "star")
+        # apparaît. On compte le front montant (absent -> présent) pour ne pas compter
+        # plusieurs fois la même animation qui dure plusieurs images.
+        self._star_cd = max(0, self._star_cd - 1)
+        seen = any(d(img) for d in self.star_detectors)
+        if seen and not self._star_seen and self._star_cd == 0:
             self.stars += 1
-            self._star_cd = 10
+            self._star_cd = self.star_cooldown
+        self._star_seen = seen
 
         return HudState(score=self.score.read(img), coins=self.coins.read(img),
                         multiplier=self.multiplier or 1, stars=self.stars,

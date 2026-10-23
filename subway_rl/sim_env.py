@@ -6,7 +6,7 @@ aux récompenses, ce que signifie chaque forme/couleur.
 
 Éléments du monde (3 voies) :
   - pièce            -> +pièce
-  - étoile           -> +1 au multiplicateur de la partie (comme Subway Surfers City)
+  - étoile           -> +1 au multiplicateur de la partie (simplifié)
   - barrière basse   -> il faut sauter, sinon mort
   - barrière haute   -> il faut rouler, sinon mort
   - train            -> il faut changer de voie ; foncer dans l'avant = mort,

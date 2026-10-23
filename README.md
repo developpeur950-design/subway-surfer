@@ -22,12 +22,13 @@ scrcpy, et c'est le PC qui regarde, décide et apprend :
 |-----------------------------------------|-------------------------|
 | chaque point de score gagné             | `+0.01`                 |
 | chaque pièce ramassée                   | `+1`                    |
-| chaque étoile ramassée (+1 au multiplicateur de la partie) | `+5` |
+| chaque étoile multiplicatrice ramassée | `+5`                    |
 | se prendre un mur / trébucher           | `-3`                    |
 | mourir                                  | `-10` (fin de partie)   |
 
-Tout se règle dans `config.yaml`, section `rewards`. Les étoiles sont comptées en lisant le
-multiplicateur affiché (« x12 ») : chaque +1 = une étoile.
+Tout se règle dans `config.yaml`, section `rewards`. Les étoiles sont détectées **visuellement**
+(l'effet qui s'affiche quand on en ramasse une), pas via le multiplicateur, qui peut changer pour
+d'autres raisons.
 
 ## Comment l'agent apprend et découvre seul
 
@@ -132,7 +133,13 @@ python calibrate.py template death
 python calibrate.py screenshot
 python calibrate.py template stumble
 
-# e) positions des boutons (rejouer, pause, reprendre...) : cliquez dessus
+# e) étoiles : enregistrez ~15 s de jeu en ramassant une étoile, puis dans calib/rec/
+#    choisissez l'image où l'effet de ramassage est visible et encadrez cet effet
+python calibrate.py record --seconds 15
+python calibrate.py template star --image calib/rec/0123.png
+#    (refaites-le 2 ou 3 fois avec d'autres images : star_2.png, star_3.png...)
+
+# f) positions des boutons (rejouer, pause, reprendre...) : cliquez dessus
 python calibrate.py point --image calib/screen.png
 ```
 
@@ -142,9 +149,14 @@ résultats, menu pause) pour relever tous les boutons. Un clic droit dans scrcpy
 
 Vérifiez ensuite :
 ```powershell
-python calibrate.py test     # pendant une partie : score/pièces/multiplicateur corrects, mort=True à la fin
+python calibrate.py test     # pendant une partie : score/pièces corrects, étoiles +1 à chaque étoile, mort=True à la fin
 python calibrate.py keys     # le personnage doit aller à gauche, droite, sauter, rouler
 ```
+
+Pour l'étoile, choisissez un élément de l'effet qui n'apparaît **que** quand on en ramasse une
+(pas l'étoile posée sur la voie, sinon elle serait comptée avant d'être prise). Si `test` compte
+des étoiles en trop, montez `threshold` (0.85–0.9) pour `star` dans `config.yaml` ; s'il n'en
+compte pas, baissez-le (0.7) ou ajoutez une autre image.
 
 Sans la capture `stumble`, la pénalité pour les chocs contre un mur ne s'applique jamais (la mort,
 elle, est toujours détectée).

@@ -4,7 +4,7 @@
 rewards:
   per_point: 0.01              # + pour chaque point de score gagné
   per_coin: 1.0                # + pour chaque pièce ramassée
-  per_multiplier_star: 5.0     # + pour chaque étoile ramassée (= +1 au multiplicateur de la partie)
+  per_multiplier_star: 5.0     # + pour chaque étoile multiplicatrice ramassée (détectée visuellement)
   death: -10.0                 # - quand il meurt
   stumble: -3.0                # - quand il se prend un mur / trébuche
   alive_bonus: 0.0             # + petit bonus par pas de temps vivant (optionnel)
@@ -53,7 +53,7 @@ game:
   regions:
     score: [300, 20, 160, 40]
     coins: [300, 65, 160, 35]
-    multiplier: [230, 20, 65, 40]   # le "x12" : chaque +1 = une étoile ramassée
+    multiplier: [230, 20, 65, 40]   # le "x12" (informatif ; mettre null si inutile)
 
   # Images de référence (capturées avec calibrate.py)
   templates:
@@ -61,11 +61,11 @@ game:
       - {path: templates/death.png, threshold: 0.8}
     stumble: []                # ex : flash/icône quand on se cogne, l'inspecteur qui apparaît...
     #  - {path: templates/stumble.png, region: [0, 300, 800, 300], threshold: 0.75}
-    star: []                   # secours si la zone "multiplier" n'est pas utilisable
+    star: []                   # effet visuel quand une étoile est ramassée (calibrate.py record + template star)
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 10
   max_score_jump: 5000
-  max_stars_per_step: 3        # garde-fou OCR sur le multiplicateur
+  star_cooldown_steps: 3       # pas minimum entre deux étoiles comptées
 
   # Séquences d'actions : {click: [x, y]} dans la zone capturée, {key: ...}, {wait: secondes}
   # Relevez les positions des boutons avec : python calibrate.py point
