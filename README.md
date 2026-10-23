@@ -53,7 +53,8 @@ directement.
 train.py              entraînement (simulateur ou vrai jeu)
 play.py               faire jouer un modèle entraîné
 calibrate.py          configuration du vrai jeu (zones du HUD, images de référence, boutons, test)
-lancer_scrcpy.bat     affiche le téléphone sur le PC
+lancer_scrcpy.bat     affiche le téléphone sur le PC (double-clic)
+scrcpy/               scrcpy v5.0.1 + adb pour Windows (licence Apache 2.0)
 config.yaml           récompenses, hyperparamètres, réglages du jeu
 subway_rl/
   rewards.py          calcul des récompenses à partir du HUD
@@ -70,10 +71,8 @@ subway_rl/
 
 1. **Python 3.11 ou 3.12** (python.org, cocher « Add Python to PATH »), **Git** (git-scm.com).
 2. **Tesseract OCR** (lecture des chiffres du score) : installeur « UB Mannheim »
-   (github.com/UB-Mannheim/tesseract/wiki), puis ajouter `C:\Program Files\Tesseract-OCR` au PATH.
-3. **scrcpy** pour Windows (github.com/Genymobile/scrcpy → Releases ; adb est inclus). Copiez
-   `lancer_scrcpy.bat` dans son dossier.
-4. Le projet :
+   (github.com/UB-Mannheim/tesseract/wiki), dossier d'installation par défaut.
+3. Le projet (**scrcpy et adb sont inclus** dans le dossier `scrcpy/`, rien à installer) :
    ```powershell
    git clone https://github.com/developpeur950-design/subway-surfer.git
    cd subway-surfer
@@ -107,7 +106,7 @@ récompense. Il vérifie en quelques dizaines de minutes que tout fonctionne sur
    **USB contrôlé par : Cet appareil** et **Transfert de fichiers / Android Auto**, puis acceptez
    l'autorisation, activez **Ne pas déranger**,
    baissez la luminosité et laissez-le en charge.
-4. Lancez `lancer_scrcpy.bat` : l'écran du téléphone s'affiche en haut à gauche du PC.
+4. Double-cliquez sur `lancer_scrcpy.bat` (dans le dossier du projet) : l'écran du téléphone s'affiche en haut à gauche du PC.
    **Ne déplacez plus cette fenêtre.** (Sans câble : ajoutez `--tcpip`, mais l'agent réagira un
    peu plus lentement.)
 5. Ouvrez Subway Surfers City et allez jusqu'à l'écran « toucher pour jouer ».

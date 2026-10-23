@@ -1,0 +1,5 @@
+scrcpy v5.0.1 pour Windows 64 bits (https://github.com/Genymobile/scrcpy)
+Archive officielle scrcpy-win64-v5.0.1.zip, SHA-256 :
+b12a2c4ee8be317422451fc7dcf8ee20a71b5ea7ef9ad73ddd825a25316227a5
+Licence Apache 2.0 : voir LICENSE.txt. Contient aussi adb (Android platform-tools).
+Lancez-le avec lancer_scrcpy.bat, à la racine du projet.
