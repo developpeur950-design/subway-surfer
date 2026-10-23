@@ -28,7 +28,7 @@ ACTION_NAMES = ["rien", "gauche", "droite", "saut", "roulade", "hoverboard"]
 class ScreenCapture:
     def __init__(self, region: dict):
         import mss
-        self.sct = mss.mss()
+        self.sct = getattr(mss, "MSS", mss.mss)()  # mss >= 10 : MSS
         self.region = {k: int(region[k]) for k in ("left", "top", "width", "height")}
 
     def grab(self) -> np.ndarray:

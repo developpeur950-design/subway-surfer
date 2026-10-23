@@ -40,7 +40,7 @@ def save(cfg, path):
 
 def grab(cfg, full=False):
     import mss
-    with mss.mss() as sct:
+    with getattr(mss, "MSS", mss.mss)() as sct:
         mon = sct.monitors[1] if full else cfg["game"]["capture"]
         return np.asarray(sct.grab(mon))[:, :, :3].copy()
 
