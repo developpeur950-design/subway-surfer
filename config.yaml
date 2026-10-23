@@ -44,9 +44,8 @@ overlay:
     diff_threshold: 30         # sensibilité (plus bas = plus de cadres)
     min_area: 0.0008           # taille minimale d'un élément (fraction de l'image)
     ignore_top: 0.12           # ne pas encadrer le HUD (haut de l'écran)
-    # ne chercher des éléments que sur les rails (trapèze, fractions x/y de l'image) :
-    # le décor qui défile sur les côtés et les icônes à droite sont ignorés
-    roi: [[0.25, 0.22], [0.75, 0.22], [1.0, 0.92], [0.0, 0.92]]
+    roi: null                  # zone de recherche : null = tout l'écran
+                               # (ex. rails seulement : [[0.25, 0.22], [0.75, 0.22], [1.0, 0.92], [0.0, 0.92]])
     player_zone: [0.33, 0.58, 0.67, 0.86] # zone du personnage (la caméra le suit : toujours en bas au centre)
     obstacle_factor: 1.5       # OBSTACLE si suivi de chocs/morts 1,5x plus que la moyenne (cadre rouge)
     bonus_factor: 1.5          # BONUS si suivi de pièces/étoiles 1,5x plus que la moyenne (cadre vert)
