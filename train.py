@@ -116,7 +116,7 @@ def make_overlay(cfg: dict, env_kind: str, show: bool = True, video: str | None 
         crop = tuple(g.get("obs_crop_y", [0.0, 1.0]))
     else:
         ocfg = {**ocfg, "display_height": 420,
-                "discovery": {**ocfg.get("discovery", {}), "ignore_top": 0.0,
+                "discovery": {**ocfg.get("discovery", {}), "ignore_top": 0.0, "roi": None,
                               "player_zone": [0.0, 0.85, 1.0, 1.0]}}
     return LiveOverlay(ocfg, window_pos=pos, video_path=video, show=show, crop_y=crop)
 

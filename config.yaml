@@ -44,7 +44,10 @@ overlay:
     diff_threshold: 30         # sensibilité (plus bas = plus de cadres)
     min_area: 0.0008           # taille minimale d'un élément (fraction de l'image)
     ignore_top: 0.12           # ne pas encadrer le HUD (haut de l'écran)
-    player_zone: [0.3, 0.55, 0.7, 0.85]   # où se trouve le personnage (x0, y0, x1, y1 en fractions)
+    # ne chercher des éléments que sur les rails (trapèze, fractions x/y de l'image) :
+    # le décor qui défile sur les côtés et les icônes à droite sont ignorés
+    roi: [[0.25, 0.22], [0.75, 0.22], [1.0, 0.92], [0.0, 0.92]]
+    player_zone: [0.33, 0.6, 0.67, 0.86]  # où se trouve le personnage (x0, y0, x1, y1 en fractions)
     obstacle_factor: 1.5       # OBSTACLE si suivi de chocs/morts 1,5x plus que la moyenne (cadre rouge)
     bonus_factor: 1.5          # BONUS si suivi de pièces/étoiles 1,5x plus que la moyenne (cadre vert)
     bonus_horizon: 12          # pas (~1 s) pendant lesquels les gains comptent après un contact
@@ -70,15 +73,15 @@ game:
   # Zones [x, y, largeur, hauteur] relatives à la zone capturée
   regions:
     # (exemples pour un téléphone 591x1280 affiché en 473x1024 par scrcpy)
-    score: [200, 70, 120, 38]       # « 151 877 »
+    score: [196, 68, 134, 42]       # « 151 877 »
     coins: [404, 76, 52, 28]        # « 206 » à côté de la pièce
-    multiplier: [92, 68, 92, 40]    # « x8,5 » (informatif ; mettre null si inutile)
+    multiplier: [72, 66, 118, 44]   # « x8,5 » / « x11,3 » (informatif ; mettre null si inutile)
 
   # Images de référence (capturées avec calibrate.py)
   templates:
     death:                     # écran de fin de partie / "Continuer ?"
       - {path: templates/death.png, threshold: 0.8}
-    stumble: []                # ex : flash/icône quand on se cogne, l'inspecteur qui apparaît...
+    stumble: []                # le garde (et son chien) qui apparaît en bas à gauche après un choc
     #  - {path: templates/stumble.png, region: [0, 300, 800, 300], threshold: 0.75}
     star: []                   # le bandeau « ÉTOILE SECRÈTE » (calibrate.py record + template star)
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)

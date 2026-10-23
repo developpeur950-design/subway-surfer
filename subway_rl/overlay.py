@@ -38,6 +38,7 @@ class Element:
 class ElementDiscovery:
     def __init__(self, n_types: int = 10, work_width: int = 240, diff_threshold: float = 30,
                  min_area: float = 0.0008, history: int = 25, ignore_top: float = 0.0,
+                 roi=None,
                  new_type_distance: float = 0.6, player_zone=(0.3, 0.55, 0.7, 0.85),
                  obstacle_factor: float = 1.5, bonus_factor: float = 1.5,
                  bonus_horizon: int = 12, danger_horizon: int = 5, min_touches: int = 10):
@@ -50,6 +51,9 @@ class ElementDiscovery:
         self.frames: deque = deque(maxlen=history)
         self._t = 0
         self.ignore_top, self.new_type_distance = ignore_top, new_type_distance
+        # zone de recherche (polygone en fractions de l'image) : les rails, pas le décor qui défile
+        self.roi = np.array(roi, np.float32) if roi else None
+        self._roi_mask = None
         self.player_zone = player_zone  # x0, y0, x1, y1 en fractions de l'image
         self.bg = None
         self.centroids: list[np.ndarray] = []
@@ -107,6 +111,12 @@ class ElementDiscovery:
         diff = np.abs(f.astype(np.int16) - self.bg).max(axis=2)
         mask = (diff > self.diff_threshold).astype(np.uint8) * 255
         mask[: int(self.ignore_top * mask.shape[0])] = 0
+        if self.roi is not None:
+            if self._roi_mask is None or self._roi_mask.shape != mask.shape:
+                self._roi_mask = np.zeros_like(mask)
+                pts = (self.roi * [mask.shape[1], mask.shape[0]]).astype(np.int32)
+                cv2.fillPoly(self._roi_mask, [pts], 255)
+            mask &= self._roi_mask
         if mask.mean() > 0.6 * 255:  # toute l'image a changé (secousse, menu...)
             self.frames.clear()
             self.bg = None
