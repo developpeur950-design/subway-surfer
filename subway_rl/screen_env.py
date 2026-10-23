@@ -64,7 +64,8 @@ class SubwayScreenEnv(gym.Env):
         img = self.capture.grab()
         for t in self.cfg["game"].get("templates", {}).get(name) or []:
             try:
-                pos = TemplateDetector(t["path"], t.get("region"), t.get("threshold", 0.8)).locate(img)
+                pos = TemplateDetector(t["path"], t.get("region"), t.get("threshold", 0.8),
+                                       t.get("mask", "yellow" if name == "ingame" else None)).locate(img)
             except FileNotFoundError:
                 continue
             if pos is not None:

@@ -65,8 +65,8 @@ class NumberReader:
 
     def reset(self, value: int = 0):
         self.value = value
-        self._fresh = True  # la première lecture d'une partie est acceptée telle quelle
-        self._pending = None
+        self._fresh = True  # début de partie : la valeur sera confirmée par 3 lectures
+        self._pending, self._first = None, []
 
     def _parse(self, text: str) -> float | None:
         if self.decimal:  # ex : "x8,5" -> 8.5
@@ -134,9 +134,17 @@ class NumberReader:
             self.status = "à confirmer"
             return self.value
         if self._fresh:
-            self.value, self._fresh, self._rejected = v, False, []
-            self.status = "ok"
-            return v
+            # début de partie : 3 lectures cohérentes avant d'accepter (une seule lecture
+            # fausse, comme 19712 au lieu de 461, ne doit pas devenir la référence)
+            self._first = (getattr(self, "_first", []) + [v])[-3:]
+            f = self._first
+            step = self.big_jump if self.big_jump is not None else (self.max_jump or float("inf")) / 4
+            if self.confirm > 1 or (len(f) == 3 and all(a <= b <= a + step for a, b in zip(f, f[1:]))):
+                self.value, self._fresh, self._rejected, self._first = v, False, [], []
+                self.status = "ok"
+                return v
+            self.status = "à confirmer"
+            return self.value
         # score et pièces ne perdent jamais de chiffres pendant une partie : une lecture plus
         # courte est une lecture partielle (animation, chiffre masqué)
         if (self.monotonic and self.value >= 10
@@ -159,18 +167,43 @@ class NumberReader:
 class TemplateDetector:
     """Détecte une image de référence (ex : écran "Game Over", flash de choc)."""
 
-    def __init__(self, path: str, region=None, threshold: float = 0.8):
+    def __init__(self, path: str, region=None, threshold: float = 0.8, mask: str | None = None):
         tpl = cv2.imread(path, cv2.IMREAD_COLOR)
         if tpl is None:
             raise FileNotFoundError(path)
+        self.mask = None
+        if mask == "yellow":
+            tpl, self.mask = self._yellow_mask(tpl)
         self.tpl, self.region, self.threshold = tpl, region, threshold
+
+    @staticmethod
+    def _yellow_mask(tpl):
+        """Bouton jaune (pause) : on ne compare QUE le bouton, pas le décor qui l'entoure.
+
+        L'image est recadrée sur la partie jaune-orangé, et seuls ses pixels jaunes et ses
+        barres sombres comptent : le décor changeant derrière le bouton n'a plus d'effet.
+        """
+        hsv = cv2.cvtColor(tpl, cv2.COLOR_BGR2HSV)
+        yellow = (hsv[..., 0] >= 8) & (hsv[..., 0] <= 35) & (hsv[..., 1] > 110) & (hsv[..., 2] > 140)
+        if yellow.sum() < 30:
+            return tpl, None
+        n, lab, st, _ = cv2.connectedComponentsWithStats(yellow.astype(np.uint8))
+        k = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
+        x, y, w, h = st[k, :4]
+        tpl, hsv = tpl[y:y + h, x:x + w], hsv[y:y + h, x:x + w]
+        yellow = (hsv[..., 0] >= 8) & (hsv[..., 0] <= 35) & (hsv[..., 1] > 110) & (hsv[..., 2] > 140)
+        mask = ((yellow | (hsv[..., 2] < 80)) * 255).astype(np.uint8)
+        return tpl, mask
+
+    def _match(self, area):
+        res = cv2.matchTemplate(area, self.tpl, cv2.TM_CCOEFF_NORMED, mask=self.mask)
+        return np.nan_to_num(res, nan=-1.0, posinf=-1.0, neginf=-1.0)
 
     def score(self, img: np.ndarray) -> float:
         area = crop(img, self.region) if self.region else img
         if area.shape[0] < self.tpl.shape[0] or area.shape[1] < self.tpl.shape[1]:
             return 0.0
-        res = cv2.matchTemplate(area, self.tpl, cv2.TM_CCOEFF_NORMED)
-        return float(res.max())
+        return float(self._match(area).max())
 
     def __call__(self, img: np.ndarray) -> bool:
         return self.score(img) >= self.threshold
@@ -180,8 +213,7 @@ class TemplateDetector:
         area = crop(img, self.region) if self.region else img
         if area.shape[0] < self.tpl.shape[0] or area.shape[1] < self.tpl.shape[1]:
             return None
-        res = cv2.matchTemplate(area, self.tpl, cv2.TM_CCOEFF_NORMED)
-        _, score, _, (x, y) = cv2.minMaxLoc(res)
+        _, score, _, (x, y) = cv2.minMaxLoc(self._match(area))
         if score < self.threshold:
             return None
         ox, oy = (self.region[0], self.region[1]) if self.region else (0, 0)
@@ -207,13 +239,15 @@ class HudReader:
         self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100, decimal=True,
                                   glyphs=g[GROUPS["multiplier"]], confirm=2,
                                   valid_range=tuple(cfg.get("multiplier_range", [1, 60])))
-                     if regions.get("multiplier") and has_reader(GROUPS["multiplier"]) else None)
+                     if regions.get("multiplier") and cfg.get("read_multiplier", False)
+                     and has_reader(GROUPS["multiplier"]) else None)
 
-        def detectors(key):
+        def detectors(key, mask=None):
             out = []
-            for t in cfg.get("templates", {}).get(key, []):
+            for t in cfg.get("templates", {}).get(key) or []:
                 if os.path.exists(t["path"]):
-                    out.append(TemplateDetector(t["path"], t.get("region"), t.get("threshold", 0.8)))
+                    out.append(TemplateDetector(t["path"], t.get("region"), t.get("threshold", 0.8),
+                                                t.get("mask", mask)))
                 else:
                     print(f"[hud] modèle introuvable, ignoré : {t['path']}")
             return out
@@ -221,7 +255,7 @@ class HudReader:
         self.death_detectors = detectors("death")
         # bouton pause jaune : visible uniquement pendant une partie. S'il disparaît assez
         # longtemps, la partie est finie (plus fiable que l'écran de fin, qui varie)
-        self.ingame_detectors = detectors("ingame")
+        self.ingame_detectors = detectors("ingame", mask="yellow")
         self.ingame_missing_for_death = cfg.get("ingame_missing_for_death", 8)
         self.stumble_detectors = detectors("stumble")
         self.star_detectors = detectors("star")

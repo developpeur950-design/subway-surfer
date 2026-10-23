@@ -99,6 +99,7 @@ game:
   ingame_missing_for_death: 8  # bouton pause absent pendant N pas (~0,8 s) = partie finie
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 10
+  read_multiplier: false       # lire le multiplicateur (informatif, peu fiable, inutile aux récompenses)
   max_score_jump: 50000        # les bonus du jeu peuvent ajouter plusieurs milliers de points d un coup
   star_cooldown_steps: 3       # pas minimum entre deux étoiles comptées
 
