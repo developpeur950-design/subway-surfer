@@ -40,10 +40,11 @@ class NumberReader:
             raise ImportError("pytesseract n'est pas installé (pip install pytesseract + binaire Tesseract)")
         self.region, self.monotonic, self.max_jump = region, monotonic, max_jump
         self.invert, self.scale = invert, scale
-        self.value = 0
+        self.value, self._fresh = 0, True
 
     def reset(self, value: int = 0):
         self.value = value
+        self._fresh = True  # la première lecture d'une partie est acceptée telle quelle
 
     def raw_read(self, img: np.ndarray) -> int | None:
         roi = crop(img, self.region)
@@ -62,6 +63,9 @@ class NumberReader:
         v = self.raw_read(img)
         if v is None:
             return self.value
+        if self._fresh:
+            self.value, self._fresh = v, False
+            return v
         if self.monotonic and v < self.value:
             return self.value
         if self.max_jump is not None and self.value and v - self.value > self.max_jump:
@@ -95,7 +99,10 @@ class HudReader:
         regions = cfg.get("regions", {})
         self.score = NumberReader(regions["score"], max_jump=cfg.get("max_score_jump", 5000))
         self.coins = NumberReader(regions["coins"], max_jump=50)
-        self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100)
+        # Dans Subway Surfers City, chaque étoile ramassée fait +1 au multiplicateur de la
+        # partie : il ne fait que monter, et rarement de plus de 1 ou 2 d'un coup.
+        self.mult = (NumberReader(regions["multiplier"], monotonic=True,
+                                  max_jump=cfg.get("max_stars_per_step", 3))
                      if regions.get("multiplier") else None)
 
         def detectors(key):
@@ -120,6 +127,7 @@ class HudReader:
         if self.mult:
             self.mult.reset(1)
         self.multiplier, self.stars = None, 0  # None = valeur de base pas encore lue
+        self._base_mult = 1
         self._prev_small, self._frozen = None, 0
         self._stumble_cd, self._star_cd = 0, 0
 
@@ -138,20 +146,18 @@ class HudReader:
         if self._stumble_cd == 0 and any(d(img) for d in self.stumble_detectors):
             stumbled, self._stumble_cd = True, self.stumble_cooldown
 
-        # Étoile multiplicatrice : le multiplicateur affiché augmente,
-        # ou l'icône du bonus apparaît (si un modèle a été capturé).
+        # Étoiles : chaque +1 du multiplicateur affiché = une étoile ramassée.
+        # Sans zone "multiplier", on se rabat sur l'image de l'étoile (si capturée).
         self._star_cd = max(0, self._star_cd - 1)
         if self.mult:
             m = self.mult.read(img)
             if self.multiplier is None:
-                self.multiplier = m  # multiplicateur de base (améliorations permanentes)
-            if m > self.multiplier and self._star_cd == 0:
-                self.stars += 1
-                self._star_cd = 20
+                self._base_mult = m  # multiplicateur de départ (améliorations permanentes)
             self.multiplier = max(1, m)
-        if self._star_cd == 0 and any(d(img) for d in self.star_detectors):
+            self.stars = max(self.stars, m - self._base_mult)
+        elif self._star_cd == 0 and any(d(img) for d in self.star_detectors):
             self.stars += 1
-            self._star_cd = 20
+            self._star_cd = 10
 
         return HudState(score=self.score.read(img), coins=self.coins.read(img),
                         multiplier=self.multiplier or 1, stars=self.stars,

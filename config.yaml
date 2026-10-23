@@ -4,7 +4,7 @@
 rewards:
   per_point: 0.01              # + pour chaque point de score gagné
   per_coin: 1.0                # + pour chaque pièce ramassée
-  per_multiplier_star: 5.0     # + pour chaque étoile multiplicatrice ramassée
+  per_multiplier_star: 5.0     # + pour chaque étoile ramassée (= +1 au multiplicateur de la partie)
   death: -10.0                 # - quand il meurt
   stumble: -3.0                # - quand il se prend un mur / trébuche
   alive_bonus: 0.0             # + petit bonus par pas de temps vivant (optionnel)
@@ -35,46 +35,53 @@ curiosity:
   update_every: 256
 
 # ======================================================================
-#  Vrai jeu (utilisez calibrate.py pour remplir les zones)
+#  Subway Surfers City (téléphone affiché sur le PC par scrcpy, ou BlueStacks)
+#  Toutes les valeurs ci-dessous sont des exemples : utilisez calibrate.py
 # ======================================================================
 game:
-  controller: keyboard         # "keyboard" (navigateur/PC), "mouse_swipe" (téléphone via scrcpy) ou "adb"
-  capture: {left: 0, top: 0, width: 800, height: 600}   # zone de l'écran où se trouve le jeu
+  controller: mouse_swipe      # swipes à la souris dans la fenêtre scrcpy/BlueStacks
+                               # (autres choix : "keyboard" si les flèches sont associées à des swipes, "adb")
+  capture: {left: 0, top: 31, width: 470, height: 1024}  # écran du téléphone dans la fenêtre scrcpy
   step_interval: 0.1           # secondes entre deux décisions (10 actions/s)
   obs_size: 84
   grayscale: false             # la couleur aide à distinguer pièces / étoiles / obstacles
   obs_crop_y: [0.0, 1.0]       # partie verticale de l'image donnée à l'agent
-  use_hoverboard: false
+  use_hoverboard: false        # dans City le hoverboard demande de l'énergie : laissez désactivé au début
   max_episode_steps: 20000
 
   # Zones [x, y, largeur, hauteur] relatives à la zone capturée
   regions:
-    score: [600, 10, 190, 40]
-    coins: [600, 55, 190, 35]
-    multiplier: [520, 10, 70, 40]   # mettre null si non visible
+    score: [300, 20, 160, 40]
+    coins: [300, 65, 160, 35]
+    multiplier: [230, 20, 65, 40]   # le "x12" : chaque +1 = une étoile ramassée
 
   # Images de référence (capturées avec calibrate.py)
   templates:
-    death:                     # écran de mort / "Continuer ?"
+    death:                     # écran de fin de partie / "Continuer ?"
       - {path: templates/death.png, threshold: 0.8}
     stumble: []                # ex : flash/icône quand on se cogne, l'inspecteur qui apparaît...
     #  - {path: templates/stumble.png, region: [0, 300, 800, 300], threshold: 0.75}
-    star: []                   # icône du bonus multiplicateur (en plus de la lecture du multiplicateur)
+    star: []                   # secours si la zone "multiplier" n'est pas utilisable
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 10
   max_score_jump: 5000
+  max_stars_per_step: 3        # garde-fou OCR sur le multiplicateur
 
-  # Séquences d'actions (clavier : key/click/wait ; adb : tap/key/wait)
+  # Séquences d'actions : {click: [x, y]} dans la zone capturée, {key: ...}, {wait: secondes}
+  # Relevez les positions des boutons avec : python calibrate.py point
+  # (dans scrcpy, un clic droit = touche Retour d'Android)
   restart_sequence:
     - {wait: 2.0}
-    - {key: escape}            # refuse le "continuer ?"
+    - {click: [235, 900]}      # refuser "Continuer ?" / passer
     - {wait: 2.0}
-    - {key: space}             # relance une partie (à adapter à votre version du jeu)
-    - {wait: 2.5}
+    - {click: [235, 880]}      # écran des résultats -> bouton pour rejouer
+    - {wait: 2.0}
+    - {click: [235, 850]}      # "Toucher pour jouer" / bouton Jouer
+    - {wait: 3.0}
   pause_sequence:
-    - {key: escape}
+    - {click: [30, 30]}        # bouton pause du jeu
   resume_sequence:
-    - {key: escape}
+    - {click: [235, 520]}      # bouton reprendre
     - {wait: 3.0}              # compte à rebours de reprise
 
   mouse_swipe:                 # pour controller: mouse_swipe

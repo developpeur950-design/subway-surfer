@@ -6,7 +6,7 @@ aux récompenses, ce que signifie chaque forme/couleur.
 
 Éléments du monde (3 voies) :
   - pièce            -> +pièce
-  - étoile           -> multiplicateur x2 pendant un moment (+étoile)
+  - étoile           -> +1 au multiplicateur de la partie (comme Subway Surfers City)
   - barrière basse   -> il faut sauter, sinon mort
   - barrière haute   -> il faut rouler, sinon mort
   - train            -> il faut changer de voie ; foncer dans l'avant = mort,
@@ -121,7 +121,7 @@ class SubwaySimEnv(gym.Env):
             self.grid[0, self.lane] = EMPTY
         elif cell == STAR:
             self.stars += 1
-            self.mult_timer = 60
+            self.mult_timer = 15  # petit flash à l'écran
             self.grid[0, self.lane] = EMPTY
         elif cell == LOW and self.air == 0:
             dead = True
@@ -138,7 +138,7 @@ class SubwaySimEnv(gym.Env):
         self.air, self.roll = max(0, self.air - 1), max(0, self.roll - 1)
         self.mult_timer = max(0, self.mult_timer - 1)
 
-        multiplier = 2 if self.mult_timer > 0 else 1
+        multiplier = 1 + self.stars
         if not dead:
             self.score += multiplier
         self.hud = HudState(self.score, self.coins, multiplier, self.stars, dead, stumbled)
@@ -183,7 +183,7 @@ class SubwaySimEnv(gym.Env):
         img[max(0, y0 - 3):s, x0:x1] = (60, 220, 90)
         # barre de multiplicateur / alerte inspecteur, comme le HUD du jeu
         if self.mult_timer:
-            img[0:3, : int(s * self.mult_timer / 60)] = COLORS[STAR]
+            img[0:3, :] = COLORS[STAR]
         if self.stumble_timer:
             img[s - 3:s, :] = (255, 0, 0)
         return img

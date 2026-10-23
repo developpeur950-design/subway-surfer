@@ -5,6 +5,7 @@
     python calibrate.py region coins
     python calibrate.py region multiplier
     python calibrate.py template death --image calib/screen.png    # découpe une image de référence
+    python calibrate.py point                      # cliquez sur les boutons du jeu -> coordonnées
     python calibrate.py test                       # affiche en direct ce que lit le HUD
     python calibrate.py keys                       # teste les commandes (gauche, droite, saut, roulade)
 
@@ -54,7 +55,7 @@ def select(img, title):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["screenshot", "region", "template", "test", "keys"])
+    ap.add_argument("cmd", choices=["screenshot", "region", "template", "point", "test", "keys"])
     ap.add_argument("name", nargs="?")
     ap.add_argument("--image")
     ap.add_argument("--full", action="store_true")
@@ -91,6 +92,23 @@ def main():
             lst.append({"path": path, "threshold": 0.8})
         save(cfg, args.config)
         print(f"Modèle enregistré : {path}")
+
+    elif args.cmd == "point":
+        # Donne les coordonnées des boutons (Jouer, Pause...) pour restart/pause/resume_sequence
+        img = cv2.imread(args.image or "calib/screen.png")
+        print("Cliquez sur un bouton : ses coordonnées s'affichent. ÉCHAP pour quitter.")
+
+        def on_click(event, x, y, *_):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                print(f"  - {{click: [{x}, {y}]}}")
+                cv2.circle(img, (x, y), 6, (0, 0, 255), 2)
+                cv2.imshow("Points", img)
+
+        cv2.imshow("Points", img)
+        cv2.setMouseCallback("Points", on_click)
+        while cv2.waitKey(50) != 27:
+            pass
+        cv2.destroyAllWindows()
 
     elif args.cmd == "test":
         from subway_rl.hud import HudReader
