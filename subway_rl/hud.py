@@ -34,19 +34,19 @@ def crop(img: np.ndarray, region) -> np.ndarray:
 class NumberReader:
     """Lit un nombre affiché à l'écran, avec un filtre contre les erreurs d'OCR."""
 
-    def __init__(self, region, monotonic: bool = True, max_jump: int | None = None,
-                 invert: bool = False, scale: float = 3.0):
+    def __init__(self, region, monotonic: bool = True, max_jump: float | None = None,
+                 invert: bool = False, scale: float = 3.0, decimal: bool = False):
         if pytesseract is None:
             raise ImportError("pytesseract n'est pas installé (pip install pytesseract + binaire Tesseract)")
         self.region, self.monotonic, self.max_jump = region, monotonic, max_jump
-        self.invert, self.scale = invert, scale
+        self.invert, self.scale, self.decimal = invert, scale, decimal
         self.value, self._fresh = 0, True
 
     def reset(self, value: int = 0):
         self.value = value
         self._fresh = True  # la première lecture d'une partie est acceptée telle quelle
 
-    def raw_read(self, img: np.ndarray) -> int | None:
+    def raw_read(self, img: np.ndarray) -> float | None:
         roi = crop(img, self.region)
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         gray = cv2.resize(gray, None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_CUBIC)
@@ -54,12 +54,16 @@ class NumberReader:
         _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         if not self.invert:
             bw = 255 - bw  # Tesseract préfère du texte noir sur fond blanc
+        whitelist = "0123456789xX" + (",." if self.decimal else "")
         text = pytesseract.image_to_string(
-            bw, config="--psm 7 -c tessedit_char_whitelist=0123456789xX")
-        digits = re.sub(r"\D", "", text)
+            bw, config=f"--psm 7 -c tessedit_char_whitelist={whitelist}")
+        if self.decimal:  # ex : "x8,5" -> 8.5
+            m = re.search(r"\d+(?:[.,]\d+)?", text.replace(" ", ""))
+            return float(m.group().replace(",", ".")) if m else None
+        digits = re.sub(r"\D", "", text)  # ex : "151 877" -> 151877
         return int(digits) if digits else None
 
-    def read(self, img: np.ndarray) -> int:
+    def read(self, img: np.ndarray) -> float:
         v = self.raw_read(img)
         if v is None:
             return self.value
@@ -101,7 +105,7 @@ class HudReader:
         self.coins = NumberReader(regions["coins"], max_jump=50)
         # Le multiplicateur est lu pour information (il peut changer pour d'autres
         # raisons que les étoiles) ; les étoiles sont détectées visuellement, voir read().
-        self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100)
+        self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100, decimal=True)
                      if regions.get("multiplier") else None)
 
         def detectors(key):

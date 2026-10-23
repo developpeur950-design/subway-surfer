@@ -20,15 +20,15 @@ scrcpy, et c'est le PC qui regarde, décide et apprend :
 
 | Événement                               | Récompense (par défaut) |
 |-----------------------------------------|-------------------------|
-| chaque point de score gagné             | `+0.01`                 |
+| chaque point de score gagné             | `+0.001`                |
 | chaque pièce ramassée                   | `+1`                    |
-| chaque étoile multiplicatrice ramassée | `+5`                    |
+| chaque étoile secrète ramassée          | `+5`                    |
 | se prendre un mur / trébucher           | `-3`                    |
 | mourir                                  | `-10` (fin de partie)   |
 
 Tout se règle dans `config.yaml`, section `rewards`. Les étoiles sont détectées **visuellement**
-(l'effet qui s'affiche quand on en ramasse une), pas via le multiplicateur, qui peut changer pour
-d'autres raisons.
+grâce au bandeau « ÉTOILE SECRÈTE » qui s'affiche au milieu de l'écran quand on en ramasse une
+(pas via le multiplicateur, qui peut changer pour d'autres raisons).
 
 ## Comment l'agent apprend et découvre seul
 
@@ -133,8 +133,9 @@ python calibrate.py template death
 python calibrate.py screenshot
 python calibrate.py template stumble
 
-# e) étoiles : enregistrez ~15 s de jeu en ramassant une étoile, puis dans calib/rec/
-#    choisissez l'image où l'effet de ramassage est visible et encadrez cet effet
+# e) étoiles secrètes : enregistrez ~15 s de jeu en ramassant une étoile secrète, puis dans
+#    calib/rec/ choisissez une image où le bandeau est affiché et encadrez UNIQUEMENT le texte
+#    « ÉTOILE SECRÈTE » (pas le nom en dessous, qui change d'une étoile à l'autre)
 python calibrate.py record --seconds 15
 python calibrate.py template star --image calib/rec/0123.png
 #    (refaites-le 2 ou 3 fois avec d'autres images : star_2.png, star_3.png...)
@@ -153,8 +154,8 @@ python calibrate.py test     # pendant une partie : score/pièces corrects, éto
 python calibrate.py keys     # le personnage doit aller à gauche, droite, sauter, rouler
 ```
 
-Pour l'étoile, choisissez un élément de l'effet qui n'apparaît **que** quand on en ramasse une
-(pas l'étoile posée sur la voie, sinon elle serait comptée avant d'être prise). Si `test` compte
+Pour l'étoile, n'encadrez que le texte « ÉTOILE SECRÈTE » : il est identique à chaque fois, alors
+que le nom de l'étoile (« TOMBER AVEC PANACHE »…) et l'icône peuvent changer. Si `test` compte
 des étoiles en trop, montez `threshold` (0.85–0.9) pour `star` dans `config.yaml` ; s'il n'en
 compte pas, baissez-le (0.7) ou ajoutez une autre image.
 

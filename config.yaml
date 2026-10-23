@@ -2,9 +2,9 @@
 #  Récompenses (identiques pour le simulateur et le vrai jeu)
 # ======================================================================
 rewards:
-  per_point: 0.01              # + pour chaque point de score gagné
+  per_point: 0.001             # + par point de score (le score de City monte vite : ~100 pts/s avec x8,5)
   per_coin: 1.0                # + pour chaque pièce ramassée
-  per_multiplier_star: 5.0     # + pour chaque étoile multiplicatrice ramassée (détectée visuellement)
+  per_multiplier_star: 5.0     # + pour chaque étoile secrète ramassée (bandeau « ÉTOILE SECRÈTE »)
   death: -10.0                 # - quand il meurt
   stumble: -3.0                # - quand il se prend un mur / trébuche
   alive_bonus: 0.0             # + petit bonus par pas de temps vivant (optionnel)
@@ -41,7 +41,7 @@ curiosity:
 game:
   controller: mouse_swipe      # swipes à la souris dans la fenêtre scrcpy/BlueStacks
                                # (autres choix : "keyboard" si les flèches sont associées à des swipes, "adb")
-  capture: {left: 0, top: 31, width: 470, height: 1024}  # écran du téléphone dans la fenêtre scrcpy
+  capture: {left: 0, top: 31, width: 473, height: 1024}  # écran du téléphone dans la fenêtre scrcpy
   step_interval: 0.1           # secondes entre deux décisions (10 actions/s)
   obs_size: 84
   grayscale: false             # la couleur aide à distinguer pièces / étoiles / obstacles
@@ -51,9 +51,10 @@ game:
 
   # Zones [x, y, largeur, hauteur] relatives à la zone capturée
   regions:
-    score: [300, 20, 160, 40]
-    coins: [300, 65, 160, 35]
-    multiplier: [230, 20, 65, 40]   # le "x12" (informatif ; mettre null si inutile)
+    # (exemples pour un téléphone 591x1280 affiché en 473x1024 par scrcpy)
+    score: [200, 70, 120, 38]       # « 151 877 »
+    coins: [404, 76, 52, 28]        # « 206 » à côté de la pièce
+    multiplier: [92, 68, 92, 40]    # « x8,5 » (informatif ; mettre null si inutile)
 
   # Images de référence (capturées avec calibrate.py)
   templates:
@@ -61,7 +62,7 @@ game:
       - {path: templates/death.png, threshold: 0.8}
     stumble: []                # ex : flash/icône quand on se cogne, l'inspecteur qui apparaît...
     #  - {path: templates/stumble.png, region: [0, 300, 800, 300], threshold: 0.75}
-    star: []                   # effet visuel quand une étoile est ramassée (calibrate.py record + template star)
+    star: []                   # le bandeau « ÉTOILE SECRÈTE » (calibrate.py record + template star)
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 10
   max_score_jump: 5000
@@ -79,7 +80,7 @@ game:
     - {click: [235, 850]}      # "Toucher pour jouer" / bouton Jouer
     - {wait: 3.0}
   pause_sequence:
-    - {click: [30, 30]}        # bouton pause du jeu
+    - {click: [44, 92]}        # bouton pause jaune en haut à gauche
   resume_sequence:
     - {click: [235, 520]}      # bouton reprendre
     - {wait: 3.0}              # compte à rebours de reprise

@@ -19,8 +19,8 @@ from dataclasses import dataclass, field, fields
 class HudState:
     score: int = 0
     coins: int = 0
-    multiplier: int = 1
-    stars: int = 0          # nombre total d'étoiles multiplicatrices ramassées pendant la partie
+    multiplier: float = 1.0  # ex : 8.5 pour « x8,5 »
+    stars: int = 0          # nombre total d'étoiles (secrètes) ramassées pendant la partie
     dead: bool = False
     stumbled: bool = False  # vrai uniquement au pas où le choc contre un mur se produit
 
