@@ -9,6 +9,7 @@
     python calibrate.py point                      # cliquez sur les boutons du jeu -> coordonnées
     python calibrate.py digits                     # apprend la police des chiffres du jeu
     python calibrate.py player                     # encadrer le personnage sur ~30 images (détecteur)
+    python calibrate.py label garde                # garde visible ? o/n sur les images (détecteur de chocs)
     python calibrate.py test                       # affiche en direct ce que lit le HUD
     python calibrate.py keys                       # teste les commandes (gauche, droite, saut, roulade)
 
@@ -62,7 +63,8 @@ def select(img, title):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["screenshot", "record", "region", "template", "point", "digits", "player", "test", "keys"])
+    ap.add_argument("cmd", choices=["screenshot", "record", "region", "template", "point", "digits", "player", "label",
+                                    "test", "keys"])
     ap.add_argument("name", nargs="?")
     ap.add_argument("--image")
     ap.add_argument("--full", action="store_true")
@@ -209,6 +211,41 @@ def main():
                 break
         print(f"{len(labels)} images encadrées dans calib/player/. Entraînez : python train_player.py")
 
+    elif args.cmd == "label":
+        # Étiqueter des images « oui / non » (ex : le garde est-il visible ?) pour train_classifier.py
+        import glob
+        import json
+        import shutil
+        name = args.name or "garde"
+        src = sorted(glob.glob("calib/rec/*.png"))[::args.every]
+        if not src:
+            raise SystemExit("Aucune image : lancez d'abord python calibrate.py record --seconds 60")
+        folder = f"calib/labels/{name}"
+        os.makedirs(folder, exist_ok=True)
+        meta = f"{folder}/labels.json"
+        labels = json.load(open(meta, encoding="utf-8")) if os.path.exists(meta) else {}
+        print(f"{len(src)} images. Dans la fenêtre : o = OUI ({name} visible), n = NON, "
+              "espace = passer, q = terminer.")
+        for k, path in enumerate(src):
+            img = cv2.imread(path)
+            view = img.copy()
+            cv2.putText(view, f"{name} ? o/n  ({k + 1}/{len(src)})", (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8, (0, 255, 255), 2)
+            cv2.imshow("Etiquetage", view)
+            key = cv2.waitKey(0) & 0xFF
+            if key == ord("q"):
+                break
+            if key in (ord("o"), ord("n")):
+                fn = f"{len(labels):05d}_{os.path.basename(path)}"
+                shutil.copy(path, f"{folder}/{fn}")
+                labels[fn] = 1 if key == ord("o") else 0
+                with open(meta, "w", encoding="utf-8") as f:
+                    json.dump(labels, f, indent=1)
+        cv2.destroyAllWindows()
+        n_yes = sum(labels.values())
+        print(f"{len(labels)} images étiquetées ({n_yes} oui, {len(labels) - n_yes} non). "
+              f"Entraînez : python train_classifier.py {name}")
+
     elif args.cmd == "test":
         from subway_rl.hud import HudReader
         hud = HudReader(cfg["game"])
@@ -223,6 +260,8 @@ def main():
             i += 1
             extra = " ".join(f"{d.score(img):.2f}" for d in hud.death_detectors)
             extra += " | étoile: " + " ".join(f"{d.score(img):.2f}" for d in hud.star_detectors)
+            if hud.guard is not None:
+                extra += f" | garde: {hud.guard.last:.2f}"
             pb = []
             for name, r in readers.items():
                 if r is None or r.status in ("ok", "à confirmer", "saut à confirmer"):

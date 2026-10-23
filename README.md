@@ -54,7 +54,8 @@ train.py              entraînement (simulateur ou vrai jeu)
 play.py               faire jouer un modèle entraîné
 calibrate.py          configuration du vrai jeu (zones du HUD, police des chiffres, images de référence, boutons, personnage, test)
 train_player.py       entraîne le détecteur du personnage
-pretrained/           détecteur du personnage et police des chiffres appris sur une vraie partie
+train_classifier.py   entraîne un détecteur oui/non (le garde, pour les chocs)
+pretrained/           détecteurs (personnage, garde) et police des chiffres appris sur de vraies parties
 lancer_scrcpy.bat     affiche le téléphone sur le PC (double-clic) ; lancer_scrcpy_wifi.bat : sans câble
 scrcpy/               scrcpy v5.0.1 + adb pour Windows (licence Apache 2.0)
 config.yaml           récompenses, hyperparamètres, réglages du jeu
@@ -175,13 +176,21 @@ Pour la pause pendant l'apprentissage, capturez aussi le bouton pour reprendre :
 ```powershell
 python calibrate.py record --seconds 20        # ramassez une étoile secrète
 python calibrate.py template star --image calib/rec/XXXX.png       # le texte « ÉTOILE SECRÈTE » seul
-python calibrate.py record --seconds 15        # cognez-vous sur le flanc d'un train
-python calibrate.py template stumble --image calib/rec/XXXX.png    # la tête du garde, en bas à gauche
+```
+
+**Chocs (le garde).** Un choc est compté quand le garde apparaît en bas de l'écran (hors des
+4 premières secondes de partie, où il est toujours là). Il est reconnu par un petit réseau
+déjà entraîné sur de vraies parties (`pretrained/garde_classifier.pt`). S'il rate des chocs ou
+en invente, entraînez-le sur VOS parties :
+```powershell
+python calibrate.py record --seconds 90         # cognez-vous plusieurs fois, dans différents décors
+python calibrate.py label garde --every 3      # o = garde visible, n = pas de garde
+python train_classifier.py garde               # crée models/garde_classifier.pt
 ```
 
 Vérifiez en jouant :
 ```powershell
-python calibrate.py test     # score, pièces, étoiles, choc, en_jeu=True pendant la partie, mort=True à la fin
+python calibrate.py test     # score, pièces, étoiles, choc (garde: 0.xx), en_jeu=True pendant la partie, mort=True à la fin
 python calibrate.py keys     # le personnage doit aller à gauche, droite, sauter, rouler
 ```
 

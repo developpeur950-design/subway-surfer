@@ -260,7 +260,19 @@ class HudReader:
         self.stumble_detectors = detectors("stumble")
         self.star_detectors = detectors("star")
         self.frozen_frames_for_death = cfg.get("frozen_frames_for_death", 15)
-        self.stumble_cooldown = cfg.get("stumble_cooldown_steps", 10)
+        self.stumble_cooldown = cfg.get("stumble_cooldown_steps", 30)
+        # garde (choc) reconnu par un petit réseau entraîné (calibrate.py label garde +
+        # train_classifier.py garde) ; à défaut, celui fourni dans pretrained/
+        self.guard = None
+        gpath = cfg.get("guard_classifier", "models/garde_classifier.pt")
+        if gpath and not os.path.exists(gpath) and os.path.exists("pretrained/garde_classifier.pt"):
+            gpath = "pretrained/garde_classifier.pt"
+        if gpath and os.path.exists(gpath):
+            from .event_classifier import EventClassifier
+            self.guard = EventClassifier(gpath, threshold=cfg.get("guard_threshold", 0.7))
+        # le garde court toujours derrière le personnage au DÉBUT d'une partie : ignoré
+        self.stumble_grace = cfg.get("stumble_grace_steps", 40)
+        self.guard_confirm = cfg.get("guard_confirm_steps", 2)
         self.star_cooldown = cfg.get("star_cooldown_steps", 3)
         if not self.star_detectors:
             print("[hud] aucune image 'star' : les étoiles ne seront pas récompensées "
@@ -277,6 +289,7 @@ class HudReader:
         self._prev_small, self._frozen = None, 0
         self._missing = 0
         self._stumble_cd, self._star_cd = 0, 0
+        self._steps, self._guard_seen = 0, 0
 
     def in_game(self, img) -> bool:
         """Vrai si une partie est en cours (bouton pause visible). Sans image « ingame » : None."""
@@ -298,8 +311,15 @@ class HudReader:
             dead = dead or self._missing >= self.ingame_missing_for_death
 
         stumbled = False
+        self._steps += 1
         self._stumble_cd = max(0, self._stumble_cd - 1)
-        if self._stumble_cd == 0 and any(d(img) for d in self.stumble_detectors):
+        if self.guard is not None:
+            # choc = le garde APPARAÎT (vu 2 fois d'affilée), hors début de partie
+            self._guard_seen = self._guard_seen + 1 if self.guard(img) else 0
+            if (self._guard_seen >= self.guard_confirm and self._stumble_cd == 0
+                    and self._steps > self.stumble_grace):
+                stumbled, self._stumble_cd = True, self.stumble_cooldown
+        elif self._stumble_cd == 0 and any(d(img) for d in self.stumble_detectors):
             stumbled, self._stumble_cd = True, self.stumble_cooldown
 
         if self.mult:
