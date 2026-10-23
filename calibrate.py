@@ -180,13 +180,29 @@ def main():
         from subway_rl.hud import HudReader
         hud = HudReader(cfg["game"])
         print("Lecture du HUD en direct (Ctrl+C pour arrêter)")
+        print("Les lectures ratées sont enregistrées dans calib/debug/ (envoyez-les si besoin).")
+        os.makedirs("calib/debug", exist_ok=True)
+        saved, i = {}, 0
+        readers = {"score": hud.score, "coins": hud.coins, "multiplier": hud.mult}
         while True:
             img = grab(cfg)
             s = hud.read(img)
+            i += 1
             extra = " ".join(f"{d.score(img):.2f}" for d in hud.death_detectors)
             extra += " | étoile: " + " ".join(f"{d.score(img):.2f}" for d in hud.star_detectors)
+            pb = []
+            for name, r in readers.items():
+                if r is None or r.status in ("ok", "à confirmer"):
+                    continue
+                pb.append(f"{name} {r.status} (lu {r.last_raw})")
+                if saved.get(name, 0) < 30:  # garde une image des lectures ratées
+                    saved[name] = saved.get(name, 0) + 1
+                    x, y, w, h = r.region
+                    cv2.imwrite(f"calib/debug/{name}_{i:05d}_{r.status}_{r.last_raw}.png".replace(" ", ""),
+                                img[y:y + h, x:x + w])
             print(f"score={s.score:>8} pièces={s.coins:>5} mult=x{s.multiplier:<5} étoiles={s.stars} "
-                  f"mort={s.dead} choc={s.stumbled}  [similarité mort: {extra}]")
+                  f"mort={s.dead} choc={s.stumbled}  [similarité mort: {extra}]"
+                  + (f"  !! {', '.join(pb)}" if pb else ""))
             time.sleep(0.2)
 
     elif args.cmd == "keys":

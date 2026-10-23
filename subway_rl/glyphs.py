@@ -87,6 +87,7 @@ def segment(roi: np.ndarray, mode: str) -> list[Glyph]:
         comps.pop(0)
     while len(comps) > 1 and comps[-1][0] - (comps[-2][0] + comps[-2][2]) > 0.7 * big:
         comps.pop()
+    big = max(c[3] for c in comps)
     top = min(c[1] for c in comps if c[3] >= 0.6 * big)
     line_h = max(1, max(c[1] + c[3] for c in comps) - top)
     out = []
@@ -160,8 +161,24 @@ class GlyphReader:
 
     # ------------------------------------------------------------ lecture
     def read(self, roi: np.ndarray, min_score: float = 0.5) -> str | None:
-        glyphs = segment(roi, self.mode)
-        if not glyphs or not self.samples:
+        """Lit le texte de la zone, ou None si un caractère n'est pas reconnu avec confiance.
+
+        Le découpage appris est essayé en premier ; si l'apparence du HUD change (cadre qui
+        s'illumine pendant un bonus...), les autres découpages sont essayés aussi.
+        """
+        if not self.samples:
+            return None
+        order = [self.mode] + sorted((m for m in MODES if m != self.mode),
+                                     key=lambda m: -self.mode_ok.get(m, 0))
+        for mode in order:
+            text = self._read_mode(roi, mode, min_score)
+            if text:
+                return text
+        return None
+
+    def _read_mode(self, roi, mode, min_score):
+        glyphs = segment(roi, mode)
+        if not glyphs:
             return None
         text = []
         for g in glyphs:

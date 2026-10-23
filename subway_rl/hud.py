@@ -45,7 +45,8 @@ class NumberReader:
     """Lit un nombre affiché à l'écran, avec un filtre contre les erreurs d'OCR."""
 
     def __init__(self, region, monotonic: bool = True, max_jump: float | None = None,
-                 invert: bool = False, scale: float = 3.0, decimal: bool = False, glyphs=None):
+                 invert: bool = False, scale: float = 3.0, decimal: bool = False, glyphs=None,
+                 confirm: int = 1):
         # glyphs : police du jeu apprise avec « calibrate.py digits » (bien plus fiable)
         self.glyphs = glyphs
         if pytesseract is None and glyphs is None:
@@ -53,6 +54,10 @@ class NumberReader:
         self.region, self.monotonic, self.max_jump = region, monotonic, max_jump
         self.invert, self.scale, self.decimal = invert, scale, decimal
         self.value, self._fresh = 0, True
+        self.confirm = confirm          # nb de lectures identiques d'affilée avant d'accepter
+        self._candidate, self._count = None, 0
+        self._rejected: list[float] = []
+        self.last_raw, self.status = None, ""  # pour le diagnostic (calibrate.py test)
 
     def reset(self, value: int = 0):
         self.value = value
@@ -85,16 +90,34 @@ class NumberReader:
 
     def read(self, img: np.ndarray) -> float:
         v = self.raw_read(img)
+        self.last_raw = v
         if v is None:
+            self.status = "illisible"
+            return self.value
+        # lecture confirmée plusieurs fois d'affilée (évite les erreurs isolées)
+        self._count = self._count + 1 if v == self._candidate else 1
+        self._candidate = v
+        if self._count < self.confirm:
+            self.status = "à confirmer"
             return self.value
         if self._fresh:
-            self.value, self._fresh = v, False
+            self.value, self._fresh, self._rejected = v, False, []
+            self.status = "ok"
             return v
-        if self.monotonic and v < self.value:
+        bad = ((self.monotonic and v < self.value)
+               or (self.max_jump is not None and self.value and v - self.value > self.max_jump))
+        if bad:
+            # plusieurs lectures cohérentes entre elles mais rejetées : c'est la valeur
+            # mémorisée qui était fausse -> on se recale dessus
+            self._rejected = (self._rejected + [v])[-3:]
+            r = self._rejected
+            if len(r) == 3 and r[0] <= r[1] <= r[2] and (self.max_jump is None or r[2] - r[0] <= self.max_jump):
+                self.value, self._rejected, self.status = v, [], "recalé"
+                return v
+            self.status = "rejeté"
             return self.value
-        if self.max_jump is not None and self.value and v - self.value > self.max_jump:
-            return self.value
-        self.value = v
+        self._rejected = []
+        self.value, self.status = v, "ok"
         return v
 
 
@@ -131,7 +154,7 @@ class HudReader:
         # Le multiplicateur est lu pour information (il peut changer pour d'autres
         # raisons que les étoiles) ; les étoiles sont détectées visuellement, voir read().
         self.mult = (NumberReader(regions["multiplier"], monotonic=False, max_jump=100, decimal=True,
-                                  glyphs=g[GROUPS["multiplier"]])
+                                  glyphs=g[GROUPS["multiplier"]], confirm=2)
                      if regions.get("multiplier") else None)
 
         def detectors(key):
