@@ -21,6 +21,13 @@ def main():
     ap.add_argument("--zone", type=float, nargs=4, help="zone regardée x0 y0 x1 y1 (fractions)")
     args = ap.parse_args()
     imgs, ys = ec.load_labels(args.name)
+    if args.name == "etourdi":  # on apprend sur la zone de la tête, comme à l'utilisation
+        import os
+        from subway_rl.player_detector import PlayerDetector, head_crop
+        det = PlayerDetector("models/player_detector.pt" if os.path.exists("models/player_detector.pt")
+                             else "pretrained/player_detector.pt", min_conf=0.0)
+        imgs = [head_crop(i, det.find(i)) for i in imgs]
+        args.zone = [0, 0, 1, 1]
     n_yes = int(np.sum(ys))
     if n_yes < 10 or len(ys) - n_yes < 10:
         raise SystemExit(f"{n_yes} « oui » et {len(ys) - n_yes} « non » : il en faut au moins 10 de chaque "

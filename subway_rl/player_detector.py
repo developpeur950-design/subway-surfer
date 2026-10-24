@@ -165,3 +165,14 @@ def load_labels(folder="calib/player"):
             imgs.append(img)
             boxes.append(tuple(box))
     return imgs, boxes
+
+
+def head_crop(frame_bgr, box, size=(128, 96)):
+    """Zone autour de la tête du personnage (les étoiles d'étourdissement tournent là)."""
+    x, y, w, h = box
+    cx = x + w // 2
+    y0, x0 = max(0, y - int(0.35 * h)), max(0, cx - int(0.9 * w))
+    crop = frame_bgr[y0:y0 + int(0.75 * h), x0:x0 + int(1.8 * w)]
+    if crop.size == 0:
+        crop = frame_bgr
+    return cv2.resize(crop, size)

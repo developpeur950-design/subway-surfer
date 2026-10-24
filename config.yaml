@@ -102,6 +102,9 @@ game:
   ingame_missing_for_death: 8  # bouton pause absent pendant N pas (~0,8 s) = partie finie
   frozen_frames_for_death: 15  # image figée pendant N pas = mort (secours)
   stumble_cooldown_steps: 30   # après un choc, pas de nouveau choc compté pendant ~3 s
+  dizzy_classifier: models/etourdi_classifier.pt   # étoiles autour de la tête après un choc
+                               # (prioritaire ; à défaut pretrained/etourdi_classifier.pt, puis le garde)
+  dizzy_threshold: 0.85
   guard_classifier: models/garde_classifier.pt  # détecteur du garde (train_classifier.py garde) ;
                                # à défaut : pretrained/garde_classifier.pt, puis l'image « stumble »
   guard_threshold: 0.7

@@ -260,7 +260,9 @@ def main():
             i += 1
             extra = " ".join(f"{d.score(img):.2f}" for d in hud.death_detectors)
             extra += " | étoile: " + " ".join(f"{d.score(img):.2f}" for d in hud.star_detectors)
-            if hud.guard is not None:
+            if hud.dizzy is not None:
+                extra += f" | étourdi: {hud.dizzy.last:.2f}"
+            elif hud.guard is not None:
                 extra += f" | garde: {hud.guard.last:.2f}"
             pb = []
             for name, r in readers.items():

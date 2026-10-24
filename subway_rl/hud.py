@@ -101,8 +101,10 @@ class NumberReader:
         fausse : on se recale dessus."""
         # vers un nombre plus court (chiffres sortis de la zone pendant un zoom...) : il faut
         # bien plus de confirmations, car le score ne redescend jamais pendant une partie
-        shorter = self.monotonic and len(str(int(v))) < len(str(int(self.value)))
-        need = self.RESYNC * 5 if shorter else self.RESYNC
+        # nombre de chiffres différent (chiffres sortis de la zone pendant un zoom, ou chiffre
+        # fantôme en trop) : il faut bien plus de confirmations
+        digits_changed = self.monotonic and len(str(int(v))) != len(str(int(self.value)))
+        need = self.RESYNC * 5 if digits_changed else self.RESYNC
         self._rejected = (self._rejected + [v])[-need:]
         r = self._rejected
         step = self.big_jump if self.big_jump is not None else (self.max_jump or float("inf")) / 4
@@ -153,11 +155,20 @@ class NumberReader:
         if ((self.monotonic and v < self.value)
                 or (self.max_jump is not None and self.value and v - self.value > self.max_jump)):
             return self._disagree(v, "rejeté")
+        if (self.big_jump is not None and self.value and v - self.value > self.big_jump
+                and len(str(int(v))) > len(str(int(self.value))) + (1 if self.value >= 10 else 0) - 1
+                and v >= 10 * self.value):
+            # chiffre fantôme en plus (« 92 » lu « 910 ») : traité comme une lecture douteuse
+            return self._disagree(v, "rejeté")
         if self.big_jump is not None and self.value and v - self.value > self.big_jump:
             # grand saut (bonus) : accepté seulement s'il se confirme à la lecture suivante
+            # grand saut : confirmé par 3 lectures cohérentes d'affilée (une erreur de lecture
+            # répétée 2 fois, comme « 34 » lu « 84 », ne suffit plus)
             p = self._pending
-            if p is None or not (p <= v <= p + self.big_jump):
-                self._pending = v
+            if p is None or not (p[-1] <= v <= p[-1] + self.big_jump):
+                p = []
+            self._pending = p + [v]
+            if len(self._pending) < 3:
                 return self._disagree(v, "saut à confirmer")
         self._rejected, self._pending = [], None
         self.value, self.status = v, "ok"
@@ -228,6 +239,9 @@ class HudReader:
         if not os.path.isdir(folder) and os.path.isdir("pretrained/digits"):
             folder = "pretrained/digits"  # police apprise sur une vraie partie
         g = {grp: GlyphReader(folder, grp) for grp in set(GROUPS.values())}
+        if not any(v.samples for v in g.values()) and folder != "pretrained/digits" \
+                and os.path.isdir("pretrained/digits"):
+            g = {grp: GlyphReader("pretrained/digits", grp) for grp in set(GROUPS.values())}
         g = {k: (v if v.samples else None) for k, v in g.items()}
         self.score = NumberReader(regions["score"], max_jump=cfg.get("max_score_jump", 50000),
                                   big_jump=cfg.get("score_confirm_jump", 2000),
@@ -270,6 +284,21 @@ class HudReader:
         if gpath and os.path.exists(gpath):
             from .event_classifier import EventClassifier
             self.guard = EventClassifier(gpath, threshold=cfg.get("guard_threshold", 0.7))
+        # Meilleur indice d'un choc : les petites étoiles qui tournent autour de la tête du
+        # personnage (étourdi ~3 s). Détecteur entraîné sur la zone de la tête, repérée par
+        # le détecteur du personnage. S'il existe, il remplace le garde.
+        self.dizzy = self.player = None
+        dpath = cfg.get("dizzy_classifier", "models/etourdi_classifier.pt")
+        if dpath and not os.path.exists(dpath) and os.path.exists("pretrained/etourdi_classifier.pt"):
+            dpath = "pretrained/etourdi_classifier.pt"
+        ppath = cfg.get("player_detector", "models/player_detector.pt")
+        if ppath and not os.path.exists(ppath) and os.path.exists("pretrained/player_detector.pt"):
+            ppath = "pretrained/player_detector.pt"
+        if dpath and os.path.exists(dpath) and ppath and os.path.exists(ppath):
+            from .event_classifier import EventClassifier
+            from .player_detector import PlayerDetector
+            self.dizzy = EventClassifier(dpath, zone=(0, 0, 1, 1), threshold=cfg.get("dizzy_threshold", 0.85))
+            self.player = PlayerDetector(ppath, min_conf=0.0)
         # le garde court toujours derrière le personnage au DÉBUT d'une partie : ignoré
         self.stumble_grace = cfg.get("stumble_grace_steps", 40)
         self.guard_confirm = cfg.get("guard_confirm_steps", 3)
@@ -292,7 +321,8 @@ class HudReader:
         self._prev_small, self._frozen = None, 0
         self._missing = 0
         self._stumble_cd, self._star_cd = 0, 0
-        self._steps, self._guard_seen, self._guard_absent, self._guard_armed = 0, 0, 0, False
+        self._steps, self._guard_seen, self._guard_absent = 0, 0, 0
+        self._guard_armed = self.dizzy is not None  # étoiles : pas de « garde du départ »
 
     def in_game(self, img) -> bool:
         """Vrai si une partie est en cours (bouton pause visible). Sans image « ingame » : None."""
@@ -324,7 +354,17 @@ class HudReader:
         stumbled = False
         self._steps += 1
         self._stumble_cd = max(0, self._stumble_cd - 1)
-        if self.guard is not None:
+        if self.dizzy is not None:
+            # choc = les étoiles d'étourdissement APPARAISSENT (vues 3 fois d'affilée)
+            from .player_detector import head_crop
+            seen = self.dizzy(head_crop(img, self.player.find(img)))
+            self._guard_seen = self._guard_seen + 1 if seen else 0
+            self._guard_absent = 0 if seen else self._guard_absent + 1
+            if self._guard_absent >= self.guard_rearm:
+                self._guard_armed = True
+            if self._guard_armed and self._guard_seen >= self.guard_confirm:
+                stumbled, self._guard_armed = True, False
+        elif self.guard is not None:
             # choc = le garde APPARAÎT (vu 3 fois d'affilée) alors qu'il était parti
             seen = self.guard(img)
             self._guard_seen = self._guard_seen + 1 if seen else 0

@@ -179,19 +179,19 @@ python calibrate.py record --seconds 20        # ramassez une étoile secrète
 python calibrate.py template star --image calib/rec/XXXX.png       # le texte « ÉTOILE SECRÈTE » seul
 ```
 
-**Chocs (le garde).** Un choc est compté quand le garde apparaît en bas de l'écran (hors des
-4 premières secondes de partie, où il est toujours là). Il est reconnu par un petit réseau
-déjà entraîné sur de vraies parties (`pretrained/garde_classifier.pt`). S'il rate des chocs ou
-en invente, entraînez-le sur VOS parties :
+**Chocs.** Un choc est compté quand les petites étoiles jaunes apparaissent autour de la tête
+du personnage (il est étourdi ~3 s après chaque choc). Elles sont reconnues par un petit réseau
+déjà entraîné sur trois parties (`pretrained/etourdi_classifier.pt`), qui regarde la zone de la
+tête repérée par le détecteur du personnage. Si des chocs sont ratés ou inventés sur VOS parties :
 ```powershell
-python calibrate.py record --seconds 90         # cognez-vous plusieurs fois, dans différents décors
-python calibrate.py label garde --every 3      # o = garde visible, n = pas de garde
-python train_classifier.py garde               # crée models/garde_classifier.pt
+python calibrate.py record --seconds 90           # cognez-vous plusieurs fois
+python calibrate.py label etourdi --every 3      # o = étoiles autour de la tête, n = non
+python train_classifier.py etourdi               # crée models/etourdi_classifier.pt
 ```
 
 Vérifiez en jouant :
 ```powershell
-python calibrate.py test     # score, pièces, étoiles, choc (garde: 0.xx), en_jeu=True pendant la partie, mort=True à la fin
+python calibrate.py test     # score, pièces, étoiles, choc (étourdi: 0.xx), en_jeu=True pendant la partie, mort=True à la fin
 python calibrate.py keys     # le personnage doit aller à gauche, droite, sauter, rouler
 ```
 

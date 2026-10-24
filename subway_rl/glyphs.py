@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 
 SIZE = 28
+FORMAT = 2  # 2 : formes en nuances de gris (1 : silhouettes)
 NAMES = {",": "virgule", ".": "point", "x": "x"}
 # le score et les pièces utilisent la même police ; le multiplicateur une autre
 GROUPS = {"score": "hud", "coins": "hud", "multiplier": "mult"}
@@ -92,6 +93,34 @@ def _split_wide(labels, comps, line_h):
     return out
 
 
+def _merge_stacked(comps, labels):
+    """Réunit les morceaux d'un même chiffre (un « 3 » flou coupé en deux) : morceaux
+    l'un au-dessus de l'autre, qui se chevauchent beaucoup horizontalement."""
+    comps = sorted(comps)
+    full = max(c[3] for c in comps)  # hauteur d'un chiffre entier
+    merged = True
+    while merged:
+        merged = False
+        for a in range(len(comps)):
+            for b in range(a + 1, len(comps)):
+                xa, ya, wa, ha, ia = comps[a]
+                xb, yb, wb, hb, ib = comps[b]
+                ov = min(xa + wa, xb + wb) - max(xa, xb)
+                h_new = max(ya + ha, yb + hb) - min(ya, yb)
+                gap = max(ya, yb) - min(ya + ha, yb + hb)  # espace vertical entre les morceaux
+                if (ov > 0.6 * min(wa, wb) and ha < 0.8 * full and hb < 0.8 * full
+                        and 0.75 * full <= h_new <= 1.1 * full and gap <= 0.15 * full):
+                    labels[labels == ib] = ia
+                    x0, y0 = min(xa, xb), min(ya, yb)
+                    comps[a] = (x0, y0, max(xa + wa, xb + wb) - x0, max(ya + ha, yb + hb) - y0, ia)
+                    del comps[b]
+                    merged = True
+                    break
+            if merged:
+                break
+    return comps, labels
+
+
 def segment(roi: np.ndarray, mode: str, split: bool = True) -> list[Glyph]:
     if roi.shape[0] < 60:  # petite police : on agrandit avant de découper
         f = 60 / roi.shape[0]
@@ -108,6 +137,7 @@ def segment(roi: np.ndarray, mode: str, split: bool = True) -> list[Glyph]:
                                          for o in comps)]
     if not comps:
         return []
+    comps, labels = _merge_stacked(comps, labels)
     big = max(c[3] for c in comps)
     # minuscule, ou bien trop large même pour 3 chiffres collés (bord d'un cadre du HUD...)
     comps = sorted(c for c in comps if c[3] >= 0.2 * big and c[2] <= 2.2 * big)
@@ -125,16 +155,22 @@ def segment(roi: np.ndarray, mode: str, split: bool = True) -> list[Glyph]:
     top = min(c[1] for c in comps if c[3] >= 0.6 * big)
     line_h = max(1, max(c[1] + c[3] for c in comps) - top)
     out = []
+    # nuances de gris (pas seulement la silhouette) : dans les petits chiffres flous, le contour
+    # noir et l'intérieur se confondent, et un « 3 » a la même silhouette qu'un « 8 »
+    lum = roi.max(axis=2).astype(np.float32)
     for x, y, w, h, i in sorted(comps):
-        g = (labels[y:y + h, x:x + w] == i).astype(np.uint8) * 255
+        inside = cv2.dilate((labels[y:y + h, x:x + w] == i).astype(np.uint8), np.ones((3, 3), np.uint8))
+        patch = lum[y:y + h, x:x + w]
+        lo, hi = np.percentile(patch[inside > 0], 5), np.percentile(patch[inside > 0], 95)
+        g = (np.clip((patch - lo) / max(hi - lo, 1), 0, 1) * inside * 255).astype(np.uint8)
         out.append(Glyph(x, _normalize(g), h / line_h, (y + h / 2 - top) / line_h))
     return out
 
 
 def _sim(a: np.ndarray, b: np.ndarray) -> float:
     """Ressemblance entre deux formes, tolérante à un petit décalage et au flou de taille."""
-    a = cv2.GaussianBlur((a > 0.5).astype(np.float32), (3, 3), 0)
-    b = cv2.GaussianBlur((b > 0.5).astype(np.float32), (3, 3), 0)
+    a = cv2.GaussianBlur(a.astype(np.float32), (3, 3), 0)
+    b = cv2.GaussianBlur(b.astype(np.float32), (3, 3), 0)
     pad = np.pad(a, 2)
     res = cv2.matchTemplate(pad, b, cv2.TM_CCOEFF_NORMED)
     return float(res.max())
@@ -151,6 +187,10 @@ class GlyphReader:
             with open(meta, encoding="utf-8") as f:
                 d = json.load(f)
             self.mode, self.feats = d.get("mode", "enclosed"), d.get("feats", {})
+            if d.get("format", 1) < FORMAT:  # ancienne police (silhouettes) : à réapprendre
+                print(f"[chiffres] police de {self.folder} à réapprendre (nouveau format) : "
+                      "python calibrate.py digits")
+                self.feats = {}
             self.mode_ok = d.get("mode_ok", {})
         back = {v: k for k, v in NAMES.items()}
         for fn, (rh, rc) in self.feats.items():
@@ -191,7 +231,8 @@ class GlyphReader:
             cv2.imwrite(os.path.join(self.folder, fn), (g.shape * 255).astype(np.uint8))
             self.feats[fn] = [g.rel_h, g.rel_cy]
         with open(os.path.join(self.folder, "meta.json"), "w", encoding="utf-8") as f:
-            json.dump({"mode": self.mode, "mode_ok": self.mode_ok, "feats": self.feats}, f, indent=1)
+            json.dump({"format": FORMAT, "mode": self.mode, "mode_ok": self.mode_ok, "feats": self.feats},
+                      f, indent=1)
         return True
 
     # ------------------------------------------------------------ lecture
