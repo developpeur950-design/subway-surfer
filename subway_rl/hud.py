@@ -272,7 +272,10 @@ class HudReader:
             self.guard = EventClassifier(gpath, threshold=cfg.get("guard_threshold", 0.7))
         # le garde court toujours derrière le personnage au DÉBUT d'une partie : ignoré
         self.stumble_grace = cfg.get("stumble_grace_steps", 40)
-        self.guard_confirm = cfg.get("guard_confirm_steps", 2)
+        self.guard_confirm = cfg.get("guard_confirm_steps", 3)
+        # un nouveau choc n'est compté qu'après que le garde a disparu ~1 s (il reste visible
+        # plusieurs secondes après un choc, et derrière le personnage au début d'une partie)
+        self.guard_rearm = cfg.get("guard_rearm_steps", 10)
         self.star_cooldown = cfg.get("star_cooldown_steps", 3)
         if not self.star_detectors:
             print("[hud] aucune image 'star' : les étoiles ne seront pas récompensées "
@@ -289,7 +292,7 @@ class HudReader:
         self._prev_small, self._frozen = None, 0
         self._missing = 0
         self._stumble_cd, self._star_cd = 0, 0
-        self._steps, self._guard_seen = 0, 0
+        self._steps, self._guard_seen, self._guard_absent, self._guard_armed = 0, 0, 0, False
 
     def in_game(self, img) -> bool:
         """Vrai si une partie est en cours (bouton pause visible). Sans image « ingame » : None."""
@@ -314,11 +317,14 @@ class HudReader:
         self._steps += 1
         self._stumble_cd = max(0, self._stumble_cd - 1)
         if self.guard is not None:
-            # choc = le garde APPARAÎT (vu 2 fois d'affilée), hors début de partie
-            self._guard_seen = self._guard_seen + 1 if self.guard(img) else 0
-            if (self._guard_seen >= self.guard_confirm and self._stumble_cd == 0
-                    and self._steps > self.stumble_grace):
-                stumbled, self._stumble_cd = True, self.stumble_cooldown
+            # choc = le garde APPARAÎT (vu 2 fois d'affilée) alors qu'il était parti
+            seen = self.guard(img)
+            self._guard_seen = self._guard_seen + 1 if seen else 0
+            self._guard_absent = 0 if seen else self._guard_absent + 1
+            if self._guard_absent >= self.guard_rearm and self._steps > self.stumble_grace:
+                self._guard_armed = True
+            if self._guard_armed and self._guard_seen >= self.guard_confirm:
+                stumbled, self._guard_armed = True, False
         elif self._stumble_cd == 0 and any(d(img) for d in self.stumble_detectors):
             stumbled, self._stumble_cd = True, self.stumble_cooldown
 

@@ -102,7 +102,8 @@ game:
   guard_classifier: models/garde_classifier.pt  # détecteur du garde (train_classifier.py garde) ;
                                # à défaut : pretrained/garde_classifier.pt, puis l'image « stumble »
   guard_threshold: 0.7
-  guard_confirm_steps: 2       # garde vu N fois d'affilée = choc
+  guard_confirm_steps: 3       # garde vu N fois d affilée = choc
+  guard_rearm_steps: 10        # le garde doit avoir disparu N pas (~1 s) avant de compter un nouveau choc
   stumble_grace_steps: 40      # début de partie (~4 s) : le garde est toujours là, on l'ignore
   read_multiplier: false       # lire le multiplicateur (informatif, peu fiable, inutile aux récompenses)
   max_score_jump: 50000        # les bonus du jeu peuvent ajouter plusieurs milliers de points d un coup
