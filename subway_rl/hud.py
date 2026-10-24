@@ -309,15 +309,23 @@ class HudReader:
 
     def read(self, img: np.ndarray) -> HudState:
         dead = any(d(img) for d in self.death_detectors) or self._is_frozen(img)
+        # hors partie (intro, menus, écran de fin, pause) : on ne lit RIEN, sinon des
+        # nombres ou des « chocs » seraient inventés à partir des menus
+        playing = True
         if self.ingame_detectors:
-            self._missing = 0 if self.in_game(img) else self._missing + 1
+            playing = bool(self.in_game(img))
+            self._missing = 0 if playing else self._missing + 1
             dead = dead or self._missing >= self.ingame_missing_for_death
+        if not playing:
+            return HudState(score=self.score.value, coins=self.coins.value,
+                            multiplier=self.multiplier or 1, stars=self.stars,
+                            dead=dead, stumbled=False)
 
         stumbled = False
         self._steps += 1
         self._stumble_cd = max(0, self._stumble_cd - 1)
         if self.guard is not None:
-            # choc = le garde APPARAÎT (vu 2 fois d'affilée) alors qu'il était parti
+            # choc = le garde APPARAÎT (vu 3 fois d'affilée) alors qu'il était parti
             seen = self.guard(img)
             self._guard_seen = self._guard_seen + 1 if seen else 0
             self._guard_absent = 0 if seen else self._guard_absent + 1

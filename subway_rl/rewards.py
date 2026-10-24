@@ -33,6 +33,8 @@ class RewardConfig:
     death: float = -10.0
     stumble: float = -3.0
     alive_bonus: float = 0.0
+    per_second: float = 0.0   # ex : -0.1 = pénalité de 0,1 par seconde de jeu
+    step_seconds: float = 0.1  # durée d'un pas (game.step_interval)
     # Le score est multiplié par le multiplicateur du jeu : on peut le diviser
     # pour que l'agent ne soit pas récompensé "deux fois" pour une étoile.
     normalize_score_by_multiplier: bool = False
@@ -55,7 +57,7 @@ class RewardTracker:
     def reset(self, state: HudState) -> None:
         self.prev = state
         self.totals = {"points": 0.0, "coins": 0.0, "stars": 0.0,
-                       "death": 0.0, "stumble": 0.0, "alive": 0.0}
+                       "death": 0.0, "stumble": 0.0, "alive": 0.0, "time": 0.0}
 
     def step(self, state: HudState) -> tuple[float, dict]:
         cfg, prev = self.cfg, self.prev
@@ -73,6 +75,7 @@ class RewardTracker:
             "death": cfg.death if state.dead else 0.0,
             "stumble": cfg.stumble if state.stumbled else 0.0,
             "alive": 0.0 if state.dead else cfg.alive_bonus,
+            "time": cfg.per_second * cfg.step_seconds,
         }
         for k, v in parts.items():
             self.totals[k] += v

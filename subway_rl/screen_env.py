@@ -36,7 +36,8 @@ class SubwayScreenEnv(gym.Env):
         self.controller = make_controller(g)
         self.hud = HudReader(g)
         self.restarter = Restarter(g, self.controller, self.capture, self.hud)
-        self.tracker = RewardTracker(RewardConfig.from_dict(cfg.get("rewards")))
+        self.tracker = RewardTracker(RewardConfig.from_dict(
+            {**(cfg.get("rewards") or {}), "step_seconds": self.step_interval}))
 
         ch = 1 if self.grayscale else 3
         self.action_space = spaces.Discrete(self.n_actions)

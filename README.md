@@ -25,6 +25,7 @@ scrcpy, et c'est le PC qui regarde, décide et apprend :
 | chaque étoile secrète ramassée          | `+5`                    |
 | se prendre un mur / trébucher           | `-3`                    |
 | mourir                                  | `-10` (fin de partie)   |
+| chaque seconde qui passe                | `-0.1`                  |
 
 Tout se règle dans `config.yaml`, section `rewards`. Les étoiles sont détectées **visuellement**
 grâce au bandeau « ÉTOILE SECRÈTE » qui s'affiche au milieu de l'écran quand on en ramasse une

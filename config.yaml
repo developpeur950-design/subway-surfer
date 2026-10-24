@@ -7,6 +7,9 @@ rewards:
   per_multiplier_star: 5.0     # + pour chaque étoile secrète ramassée (bandeau « ÉTOILE SECRÈTE »)
   death: -10.0                 # - quand il meurt
   stumble: -3.0                # - quand il se prend un mur / trébuche
+  per_second: -0.1             # - à chaque seconde qui passe (pousse à gagner vite ses points)
+                               # ⚠ si cette pénalité dépasse ce que l'agent gagne par seconde,
+                               #   mourir tôt devient « rentable » : gardez-la petite
   alive_bonus: 0.0             # + petit bonus par pas de temps vivant (optionnel)
   normalize_score_by_multiplier: false
   max_points_per_step: 50000   # protège contre les erreurs de lecture OCR
